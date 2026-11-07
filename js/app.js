@@ -177,6 +177,7 @@ import * as IA from './gemini.js';
   var ICO = {
     retour: svg(22, '<path d="M15 5l-7 7 7 7"/>', 2),
     photo: svg(26, '<path d="M4 8h3l2-3h6l2 3h3a1 1 0 0 1 1 1v10a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V9a1 1 0 0 1 1-1z"/><circle cx="12" cy="13.5" r="3.5"/>'),
+    album: svg(24, '<rect x="3" y="4" width="18" height="16" rx="2"/><circle cx="8.5" cy="9.5" r="1.8"/><path d="M21 16l-5.5-5.5L5 20"/>'),
     plus: svg(20, '<path d="M12 5v14"/><path d="M5 12h14"/>', 2),
     info: svg(20, '<circle cx="12" cy="12" r="9"/><path d="M12 11v5"/><path d="M12 8h.01"/>', 2),
     ok: svg(16, '<path d="M5 12.5l4.5 4.5L19 7.5"/>', 2.4),
@@ -508,19 +509,40 @@ import * as IA from './gemini.js';
           : '') +
         '<h2 class="eyebrow">Recto</h2>' +
         (r
-          ? '<div class="apercu"><img src="' + r.url + '" alt="Recto de la carte"><label class="pastille" for="in-recto">Reprendre</label></div>'
-          : '<label class="depot grand" for="in-recto">' + ICO.photo + '<span>Prendre ou choisir la photo</span></label>') +
+          ? '<div class="apercu"><img src="' + r.url + '" alt="Recto de la carte"></div>' + choixPhoto('recto', true)
+          : choixPhoto('recto', false)) +
         '<h2 class="eyebrow">Verso <em>(facultatif)</em></h2>' +
         (v
-          ? '<div class="apercu"><img src="' + v.url + '" alt="Verso de la carte"><button class="pastille gauche" data-a="retirer-verso">Retirer</button><label class="pastille" for="in-verso">Reprendre</label></div>'
-          : '<label class="depot" for="in-verso">' + ICO.plus + '<span>Ajouter le verso</span></label>') +
-        '<div class="astuce"><span class="ico-bleu">' + ICO.info + '</span><span><strong>Recule un peu et zoome (×2 à ×3)</strong> : la carte doit remplir presque toute la photo et être bien nette. Trop près, l\'iPhone ne fait pas la mise au point. Carte à plat, sans reflet.</span></div>' +
+          ? '<div class="apercu"><img src="' + v.url + '" alt="Verso de la carte"><button class="pastille gauche" data-a="retirer-verso">Retirer</button></div>' + choixPhoto('verso', true)
+          : choixPhoto('verso', false)) +
+        '<div class="astuce"><span class="ico-bleu">' + ICO.info + '</span><span><strong>Recule un peu et zoome (×2 à ×3)</strong> : la carte doit remplir presque toute la photo et être bien nette. Trop près, le téléphone ne fait pas la mise au point. Carte à plat, sans reflet.</span></div>' +
         (S.erreurLecture ? '' : '<button class="lien" data-a="manuel">Saisir le contact à la main</button>') +
       '</div>' +
       '<div class="pied"><button class="btn pri" data-a="lire"' + (r ? '' : ' disabled') + '>Lire la carte</button></div>' +
-      '<input type="file" accept="image/*" id="in-recto" class="cache" tabindex="-1">' +
-      '<input type="file" accept="image/*" id="in-verso" class="cache" tabindex="-1">';
+      // Deux champs par face : « capture » ouvre directement l'appareil photo (indispensable sur Android,
+      // dont le sélecteur récent ne propose plus l'appareil photo), l'autre ouvre l'album.
+      '<input type="file" accept="image/*" capture="environment" id="in-recto-photo" class="cache" tabindex="-1">' +
+      '<input type="file" accept="image/*" id="in-recto-album" class="cache" tabindex="-1">' +
+      '<input type="file" accept="image/*" capture="environment" id="in-verso-photo" class="cache" tabindex="-1">' +
+      '<input type="file" accept="image/*" id="in-verso-album" class="cache" tabindex="-1">';
   };
+
+  /** Deux boutons : appareil photo et album. pris = une photo existe déjà (boutons compacts). */
+  function choixPhoto(face, pris) {
+    if (pris) {
+      return '<div class="grille2">' +
+        '<label class="btn sec" for="in-' + face + '-photo">' + ICO.photo + 'Reprendre</label>' +
+        '<label class="btn sec" for="in-' + face + '-album">' + ICO.album + 'Album</label></div>';
+    }
+    if (face === 'recto') {
+      return '<div class="grille2">' +
+        '<label class="depot grand" for="in-recto-photo">' + ICO.photo + '<span>Prendre une photo</span></label>' +
+        '<label class="depot grand" for="in-recto-album">' + ICO.album + '<span>Choisir dans l\'album</span></label></div>';
+    }
+    return '<div class="grille2">' +
+      '<label class="depot" for="in-verso-photo">' + ICO.photo + '<span>Photo du verso</span></label>' +
+      '<label class="depot" for="in-verso-album">' + ICO.album + '<span>Verso depuis l\'album</span></label></div>';
+  }
 
   function preparerImage(fichier, fin) {
     var url = URL.createObjectURL(fichier);
@@ -1114,10 +1136,10 @@ import * as IA from './gemini.js';
 
   document.addEventListener('change', function (ev) {
     var el = ev.target;
-    if (el.id === 'in-recto' || el.id === 'in-verso') {
+    if (/^in-(recto|verso)-(photo|album)$/.test(el.id)) {
       var fichier = el.files && el.files[0];
       if (!fichier) return;
-      var face = el.id === 'in-recto' ? 'recto' : 'verso';
+      var face = el.id.indexOf('recto') >= 0 ? 'recto' : 'verso';
       preparerImage(fichier, function (img) {
         S.images[face] = img;
         S.erreurLecture = '';

@@ -270,3 +270,5 @@
   .points li { display: flex; gap: 0.85rem; align-items: flex-start; font-size: 0.94rem; line-height: 1.45; }
   .points li svg { flex-shrink: 0; color: var(--bleu); margin-top: 0.1rem; }
   .btn.google { background: var(--plein); color: var(--sur-plein); }
+  .grille2 .depot { flex-direction: column; min-height: 6.5rem; }
+  .grille2 .depot.grand { min-height: 10rem; }
