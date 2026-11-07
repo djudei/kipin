@@ -1,0 +1,51 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="color-scheme" content="light dark">
+  <meta name="theme-color" content="#F3F5F7" media="(prefers-color-scheme: light)">
+  <meta name="theme-color" content="#0F141C" media="(prefers-color-scheme: dark)">
+  <meta name="description" content="Kipin lit tes cartes de visite, les range dans ton Google Sheet et te rappelle de relancer tes contacts.">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-title" content="Kipin">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
+  <title>Kipin</title>
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="icon" type="image/png" sizes="192x192" href="icons/icon-192.png">
+  <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="css/styles.css">
+</head>
+<body>
+  <main id="app">
+    <section id="e-connexion" class="ecran" hidden></section>
+    <section id="e-cle" class="ecran" hidden></section>
+    <section id="e-contacts" class="ecran" hidden></section>
+    <section id="e-capture" class="ecran" hidden></section>
+    <section id="e-verif" class="ecran" hidden></section>
+    <section id="e-fiche" class="ecran" hidden></section>
+    <section id="e-rappels" class="ecran" hidden></section>
+    <section id="e-reglages" class="ecran" hidden></section>
+  </main>
+
+  <nav id="onglets" class="onglets" aria-label="Navigation" hidden></nav>
+
+  <div id="occupe" class="occupe" hidden>
+    <div class="occupe-boite" role="status" aria-live="polite">
+      <div class="occupe-ligne">
+        <span class="roue" aria-hidden="true"></span>
+        <span id="occupe-texte">Chargement…</span>
+      </div>
+      <p id="occupe-aide" class="note" hidden>C'est plus long que d'habitude. Tu peux attendre ou annuler.</p>
+      <button id="occupe-annuler" class="btn sec" data-a="annuler-attente" hidden>Annuler</button>
+    </div>
+  </div>
+  <div id="toast" class="toast" role="status" aria-live="polite" hidden></div>
+
+  <noscript>Kipin a besoin de JavaScript pour fonctionner.</noscript>
+  <script type="module" src="js/app.js"></script>
+</body>
+</html>
