@@ -8,6 +8,7 @@ const URL_GEMINI = 'https://generativelanguage.googleapis.com/v1beta/';
 const CLES_CARTE = ['prenom', 'nom', 'societe', 'poste', 'email', 'telephone', 'site', 'linkedin', 'adresse'];
 const CLE_CACHE = 'kipin.modeles';
 const CLE_MEMO = 'kipin.modele';
+const CLE_NIVEAUX = 'kipin.niveaux';
 
 const PROMPT = [
   'Tu lis une carte de visite. La première image est le recto, la seconde (si elle existe) le verso.',
@@ -96,10 +97,17 @@ async function modelesFlash(cle) {
 /** images = [{data: base64, mimeType}] → { champs, incertains } */
 export async function lireCarte(cle, images) {
   if (!cle) throw new Error('Clé Gemini manquante : ajoute-la dans Réglages.');
-  const corps = {
-    contents: [{ role: 'user', parts: [{ text: PROMPT }].concat(images.map(i => ({ inlineData: { mimeType: i.mimeType || 'image/jpeg', data: i.data } }))) }],
-    generationConfig: { responseMimeType: 'application/json', responseSchema: SCHEMA }
-  };
+  const contenu = [{ role: 'user', parts: [{ text: PROMPT }].concat(images.map(i => ({ inlineData: { mimeType: i.mimeType || 'image/jpeg', data: i.data } }))) }];
+  // Recopier une carte ne demande pas de « réflexion » : on prend le niveau le plus bas
+  // que le modèle accepte (minimal, sinon low), sinon son réglage par défaut.
+  const corpsPour = niveau => ({
+    contents: contenu,
+    generationConfig: Object.assign(
+      { responseMimeType: 'application/json', responseSchema: SCHEMA },
+      niveau ? { thinkingConfig: { thinkingLevel: niveau } } : {}
+    )
+  });
+  const niveaux = stock(CLE_NIVEAUX) || {};
 
   const memorise = stock(CLE_MEMO);
   let candidats = await modelesFlash(cle);
@@ -110,12 +118,22 @@ export async function lireCarte(cle, images) {
   const journal = [];
   let quotaPartout = true;
   for (const modele of candidats) {
+    const aEssayer = niveaux[modele] !== undefined ? [niveaux[modele]] : ['minimal', 'low', ''];
+    let niveau = aEssayer.shift();
     for (let essai = 0; essai < 2; essai++) {
-      const rep = await requete(URL_GEMINI + 'models/' + modele + ':generateContent', cle, corps);
+      const rep = await requete(URL_GEMINI + 'models/' + modele + ':generateContent', cle, corpsPour(niveau));
       const texte = await rep.text();
       if (rep.status === 200) {
         stock(CLE_MEMO, modele);
+        niveaux[modele] = niveau;
+        stock(CLE_NIVEAUX, niveaux);
         return nettoyer(lireReponse(texte));
+      }
+      // Niveau de réflexion refusé par ce modèle : on essaie le suivant, sans compter d'échec.
+      if (rep.status === 400 && /think/i.test(texte) && aEssayer.length) {
+        niveau = aEssayer.shift();
+        essai--;
+        continue;
       }
       journal.push(modele + ' ' + (rep.status || 'réseau : ' + rep.cause));
       if (rep.status === 0) {

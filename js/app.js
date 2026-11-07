@@ -526,14 +526,14 @@ import * as IA from './gemini.js';
     var url = URL.createObjectURL(fichier);
     var img = new Image();
     img.onload = function () {
-      var max = 1600;
+      var max = 1280; // largement assez pour lire une carte, et 2 fois plus léger à envoyer
       var k = Math.min(1, max / Math.max(img.naturalWidth, img.naturalHeight));
       var canvas = document.createElement('canvas');
       canvas.width = Math.round(img.naturalWidth * k);
       canvas.height = Math.round(img.naturalHeight * k);
       canvas.getContext('2d').drawImage(img, 0, 0, canvas.width, canvas.height);
       URL.revokeObjectURL(url);
-      var dataUrl = canvas.toDataURL('image/jpeg', 0.8);
+      var dataUrl = canvas.toDataURL('image/jpeg', 0.75);
       fin({ url: dataUrl, data: dataUrl.split(',')[1], mimeType: 'image/jpeg' });
     };
     img.onerror = function () {
@@ -874,14 +874,21 @@ import * as IA from './gemini.js';
       if (S.images.verso) imgs.push(S.images.verso);
       var envoi = imgs.map(function (i) { return { data: i.data, mimeType: i.mimeType }; });
       appel(function () {
-        return IA.lireCarte(S.cleGemini, envoi).then(function (lu) {
-          // La photo dans le Drive est un plus : si l'envoi échoue, on garde la fiche quand même.
-          return D.sauverPhotos(envoi).then(function (ids) { lu.photoIds = ids; return lu; }, function (e) {
-            if (e && e.name === 'ErreurSession') throw e;
-            lu.photoIds = [];
-            lu.photoErreur = e.message;
-            return lu;
-          });
+        // Lecture par Gemini et rangement de la photo dans le Drive en même temps.
+        // La photo est un plus : si son envoi échoue, on garde la fiche quand même.
+        var photos = D.sauverPhotos(envoi).then(function (ids) { return { ids: ids }; }, function (e) {
+          if (e && e.name === 'ErreurSession') throw e;
+          return { ids: [], erreur: e.message };
+        });
+        var lecture = IA.lireCarte(S.cleGemini, envoi);
+        lecture.catch(function () {
+          photos.then(function (p) { if (p.ids.length) D.jeterPhotos(p.ids).catch(function () {}); }, function () {});
+        });
+        return Promise.all([lecture, photos]).then(function (r) {
+          var lu = r[0];
+          lu.photoIds = r[1].ids;
+          lu.photoErreur = r[1].erreur;
+          return lu;
         });
       }, 'Lecture de la carte…', function (res) {
         S.photoIds = res.photoIds || [];
