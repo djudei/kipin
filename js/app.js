@@ -355,6 +355,18 @@ import * as IM from './import.js';
     var nom = nomComplet(c);
     return [c.poste, c.societe !== nom ? c.societe : ''].filter(Boolean).join(' · ');
   }
+  /**
+   * Taille de texte qui fait tenir une ligne dans la largeur de la carte de visite :
+   * plus le texte est long, plus il rétrécit, entre minRem et maxRem.
+   * facteur = largeur moyenne d'un caractère, en fraction de la taille du texte.
+   */
+  function taillePourCarte(texte, maxRem, minRem, facteur) {
+    var n = Math.max(String(texte || '').length, 1);
+    return 'clamp(' + minRem + 'rem, calc(100cqw / ' + (facteur * n).toFixed(1) + '), ' + maxRem + 'rem)';
+  }
+
+  /** Un contact « À relancer » sans date de relance n'a en fait rien à relancer. */
+  function statutDe(c) { return c.statut === 'À relancer' && !c.dateRelance ? 'Sans suite' : c.statut; }
   function enRetard(c) { return c.statut === 'À relancer' && c.dateRelance && c.dateRelance < auj(); }
   function listeEmails(texte) {
     return String(texte || '').split(/[\s,;]+/).map(function (e) { return e.trim().toLowerCase(); }).filter(Boolean);
@@ -393,7 +405,7 @@ import * as IM from './import.js';
 
   /* ================= Onglet : Contacts ================= */
   RENDUS.contacts = function () {
-    var n = function (statut) { return S.contacts.filter(function (c) { return !statut || c.statut === statut; }).length; };
+    var n = function (statut) { return S.contacts.filter(function (c) { return !statut || statutDe(c) === statut; }).length; };
     $('e-contacts').innerHTML =
       '<header class="barre barre-titre"><div class="marque"><span class="logo">Kipin</span><span class="sous">keep in touch</span></div></header>' +
       '<div class="contenu pile">' +
@@ -402,7 +414,7 @@ import * as IM from './import.js';
           '<span class="scan-txt"><b>Scanner une carte</b>' + (S.contacts.length ? '' : '<span>Photo ou album, champs remplis tout seuls</span>') + '</span>' +
         '</button>' +
         (S.contacts.length
-          ? '<input type="search" id="in-recherche" class="recherche" placeholder="Rechercher un nom, une société, un tag…" value="' + esc(S.recherche) + '" aria-label="Rechercher un contact">' +
+          ? '<input type="search" id="in-recherche" class="recherche" placeholder="Nom, société, tag, mot du contexte…" value="' + esc(S.recherche) + '" aria-label="Rechercher un contact">' +
             '<div class="puces">' +
               filtre('tous', 'Tous · ' + n()) +
               filtre('À relancer', 'À relancer · ' + n('À relancer')) +
@@ -425,9 +437,9 @@ import * as IM from './import.js';
     if (!S.contacts.length) { zone.innerHTML = vide('Aucun contact pour l\'instant. Scanne ta première carte.'); return; }
     var q = normTxt(S.recherche);
     var liste = S.contacts.filter(function (c) {
-      if (S.filtre !== 'tous' && c.statut !== S.filtre) return false;
+      if (S.filtre !== 'tous' && statutDe(c) !== S.filtre) return false;
       if (!q) return true;
-      return normTxt([c.prenom, c.nom, c.societe, c.poste, c.email, c.tag].join(' ')).indexOf(q) >= 0;
+      return normTxt([c.prenom, c.nom, c.societe, c.poste, c.email, c.tag, c.contexte, c.adresse, c.telephone].join(' ')).indexOf(q) >= 0;
     }).sort(function (x, y) { return (x.ajoute || '') < (y.ajoute || '') ? 1 : -1; });
     zone.innerHTML = liste.length ? '<div class="liste">' + liste.map(ligneContact).join('') + '</div>' : vide('Aucun contact ne correspond.');
   }
@@ -437,7 +449,7 @@ import * as IM from './import.js';
   function ligneContact(c) {
     var classeAvatar = '', badge = '';
     if (c.statut === 'Relancé') { classeAvatar = ' ok'; badge = '<span class="badge ok">Relancé</span>'; }
-    else if (c.statut === 'Sans suite') { classeAvatar = ' gris'; badge = '<span class="badge">Sans suite</span>'; }
+    else if (statutDe(c) === 'Sans suite') { classeAvatar = ' gris'; badge = '<span class="badge">Sans suite</span>'; }
     else if (enRetard(c)) { classeAvatar = ' retard'; badge = '<span class="badge retard">En retard</span>'; }
     else if (c.dateRelance) { badge = '<span class="badge">' + esc(dateCourte(c.dateRelance)) + '</span>'; }
     return '<button class="ligne" data-a="ouvrir" data-v="' + esc(c.id) + '">' +
@@ -775,15 +787,18 @@ import * as IM from './import.js';
           '<div class="grille2"><button class="btn sec" data-a="annuler-report">Annuler</button><button class="btn pri mini" style="width:100%" data-a="valider-report">Valider</button></div>' +
         '</div>'
       : '<button class="btn sec" data-a="ouvrir-report">' + (c.dateRelance ? 'Reporter la relance' : 'Programmer une relance') + '</button>';
-    var coordCarte = [c.email, c.telephone].filter(Boolean).map(esc).join('<br>');
+    var coordCarte = [c.email, c.telephone].filter(Boolean).map(function (t) {
+      return '<span class="cv-ligne" style="font-size:' + taillePourCarte(t, 0.78, 0.6, 0.56) + '">' + esc(t) + '</span>';
+    }).join('');
 
     $('e-fiche').innerHTML =
       '<header class="barre" style="justify-content:space-between"><button class="icone" data-a="retour" data-v="onglet" aria-label="Retour">' + ICO.retour + '</button>' +
         '<button class="lien" style="padding:0 0.75rem;font-size:0.94rem" data-a="modifier">Modifier</button></header>' +
       '<div class="carte-visite" role="img" aria-label="' + esc(['Carte de visite', nomComplet(c), c.poste, c.societe].filter(Boolean).join(', ')) + '">' +
-        '<div><span class="cv-nom">' + esc(nomComplet(c)) + '</span>' + (c.poste ? '<span class="cv-poste">' + esc(c.poste) + '</span>' : '') + '</div>' +
-        '<div class="cv-bas"><span class="cv-coord">' + coordCarte + '</span>' +
-          (c.societe && c.societe !== nomComplet(c) ? '<span class="cv-soc">' + esc(c.societe) + '</span>' : '') + '</div>' +
+        '<div><span class="cv-nom" style="font-size:' + taillePourCarte(nomComplet(c), 1.41, 1, 0.62) + '">' + esc(nomComplet(c)) + '</span>' + (c.poste ? '<span class="cv-poste">' + esc(c.poste) + '</span>' : '') + '</div>' +
+        '<div class="cv-bas">' +
+          (c.societe && c.societe !== nomComplet(c) ? '<span class="cv-soc" style="font-size:' + taillePourCarte(c.societe, 0.88, 0.7, 0.78) + '">' + esc(c.societe) + '</span>' : '') +
+          coordCarte + '</div>' +
       '</div>' +
       '<div class="badges-fiche">' +
         (c.tag ? '<span class="badge bleu">' + esc(c.tag) + '</span>' : '') +
@@ -804,7 +819,7 @@ import * as IM from './import.js';
           (c.invites ? '<span class="note">Rappel partagé avec ' + esc(c.invites) + '</span>' : '') +
           '<div class="seg c3" role="group" aria-label="Statut">' +
             ['À relancer', 'Relancé', 'Sans suite'].map(function (s) {
-              return '<button class="' + (c.statut === s ? 'actif' : '') + '" data-a="statut" data-v="' + s + '" aria-pressed="' + (c.statut === s) + '">' + s + '</button>';
+              return '<button class="' + (statutDe(c) === s ? 'actif' : '') + '" data-a="statut" data-v="' + s + '" aria-pressed="' + (statutDe(c) === s) + '">' + s + '</button>';
             }).join('') +
           '</div>' +
           reporter +
@@ -1118,7 +1133,12 @@ import * as IM from './import.js';
     },
     'statut': function (v) {
       var c = contact(S.courantId);
-      if (!c || c.statut === v) return;
+      if (!c || statutDe(c) === v) return;
+      if (v === 'À relancer' && !c.dateRelance) {
+        S.reporter = true; RENDUS.fiche();
+        toast('Choisis la date de la relance, puis valide.');
+        return;
+      }
       appel(function () { return D.changerStatut(c.id, v, S.reglages); }, 'Mise à jour…', function (nc) {
         remplacer(nc); RENDUS.fiche(); renderOnglets(); majRecap();
         toast(v === 'Relancé' ? 'Bien joué. Contact marqué comme relancé.' : v === 'Sans suite' ? 'Contact classé sans suite.' : 'Relance réactivée.');

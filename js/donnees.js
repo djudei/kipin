@@ -235,7 +235,7 @@ export async function enregistrerContact(c, photoIds, reglages) {
   c = normaliser(c, reglages);
   c.id = (crypto.randomUUID ? crypto.randomUUID() : String(Date.now()) + Math.random().toString(16).slice(2));
   c.ajoute = isoAuj();
-  c.statut = 'À relancer';
+  c.statut = c.dateRelance ? 'À relancer' : 'Sans suite'; // « Aucune relance » = rien à relancer
   c.eventId = '';
   c.photoIds = (photoIds || []).join(',');
   c.photo = photoIds && photoIds.length ? await renommerPhotos(photoIds, c) : '';
@@ -252,6 +252,8 @@ export async function majContact(c, reglages) {
   const ancien = await lireLigne(ligne);
   const nouveau = normaliser(c, reglages);
   ['id', 'ajoute', 'statut', 'eventId', 'photo', 'photoIds'].forEach(k => { nouveau[k] = ancien[k]; });
+  if (!nouveau.dateRelance && nouveau.statut === 'À relancer') nouveau.statut = 'Sans suite';
+  if (nouveau.dateRelance && !ancien.dateRelance && nouveau.statut === 'Sans suite') nouveau.statut = 'À relancer';
   await syncEvenement(nouveau, reglages);
   await ecrireLigne(ligne, nouveau);
   if (nouveau.invites && (nouveau.invites !== ancien.invites || nouveau.dateRelance !== ancien.dateRelance)) {

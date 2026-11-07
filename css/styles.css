@@ -216,12 +216,13 @@
     flex-direction: column;
     justify-content: space-between;
     gap: 0.75rem;
+    container-type: inline-size;   /* les tailles « cqw » se calculent sur la largeur de la carte */
   }
-  .cv-nom { display: block; font-family: 'Space Grotesk', -apple-system, sans-serif; font-size: 1.41rem; font-weight: 700; line-height: 1.15; overflow-wrap: anywhere; }
+  .cv-nom { display: block; font-family: 'Space Grotesk', -apple-system, sans-serif; font-size: 1.41rem; font-weight: 700; line-height: 1.15; overflow-wrap: break-word; hyphens: none; }
   .cv-poste { display: block; margin-top: 0.3rem; font-size: 0.82rem; color: var(--papier-doux); }
-  .cv-bas { display: flex; justify-content: space-between; align-items: flex-end; gap: 0.75rem; }
-  .cv-coord { font-size: 0.74rem; line-height: 1.55; color: var(--papier-doux); overflow-wrap: anywhere; min-width: 0; }
-  .cv-soc { font-family: 'Space Grotesk', -apple-system, sans-serif; font-weight: 700; font-size: 0.88rem; text-transform: uppercase; letter-spacing: 0.05em; text-align: right; overflow-wrap: anywhere; }
+  .cv-bas { display: flex; flex-direction: column; gap: 0.2rem; min-width: 0; }
+  .cv-soc { font-family: 'Space Grotesk', -apple-system, sans-serif; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; line-height: 1.2; margin-bottom: 0.35rem; overflow-wrap: break-word; hyphens: none; }
+  .cv-ligne { display: block; color: var(--papier-doux); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; line-height: 1.45; }
   .badges-fiche { display: flex; flex-wrap: wrap; gap: 0.4rem; padding: 0.85rem 1.25rem 0; }
   .actions { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 0.5rem; padding: 0.85rem 1.25rem 0; }
   .action { min-height: 4rem; border-radius: 1rem; background: var(--carte); color: var(--encre); text-decoration: none; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 0.25rem; font-size: 0.72rem; font-weight: 700; padding: 0.4rem 0.2rem; }
