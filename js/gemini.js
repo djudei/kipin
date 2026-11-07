@@ -40,15 +40,25 @@ function stock(cle, valeur) {
   return null;
 }
 
-async function requete(url, cle, corps) {
+/**
+ * Appel à Gemini avec une limite de temps. En cas d'échec réseau, renvoie une
+ * réponse factice de statut 0 pour que l'appelant puisse réessayer ou changer de modèle.
+ */
+async function requete(url, cle, corps, delaiMs) {
+  const arret = new AbortController();
+  const minuteur = setTimeout(() => arret.abort(), delaiMs || 60000);
   try {
     return await fetch(url, {
       method: corps ? 'POST' : 'GET',
       headers: Object.assign({ 'x-goog-api-key': cle }, corps ? { 'Content-Type': 'application/json' } : {}),
-      body: corps ? JSON.stringify(corps) : undefined
+      body: corps ? JSON.stringify(corps) : undefined,
+      signal: arret.signal
     });
   } catch (e) {
-    throw new Error('Pas de connexion internet. Réessaie dans un instant.');
+    const cause = e.name === 'AbortError' ? 'pas de réponse en 60 s' : (e.message || e.name);
+    return { status: 0, cause, text: async () => '' };
+  } finally {
+    clearTimeout(minuteur);
   }
 }
 
@@ -58,7 +68,8 @@ function message(texte) {
 
 /** Vérifie qu'une clé est acceptée par Gemini. */
 export async function testerCle(cle) {
-  const rep = await requete(URL_GEMINI + 'models?pageSize=1', cle);
+  const rep = await requete(URL_GEMINI + 'models?pageSize=1', cle, null, 20000);
+  if (rep.status === 0) throw new Error('Gemini injoignable depuis ce téléphone (' + rep.cause + ').');
   if (rep.status !== 200) throw new Error("Cette clé est refusée par Gemini. Vérifie que tu l'as copiée en entier.");
 }
 
@@ -66,7 +77,8 @@ export async function testerCle(cle) {
 async function modelesFlash(cle) {
   const cache = stock(CLE_CACHE);
   if (cache && cache.expire > Date.now() && cache.liste.length) return cache.liste;
-  const rep = await requete(URL_GEMINI + 'models?pageSize=1000', cle);
+  const rep = await requete(URL_GEMINI + 'models?pageSize=1000', cle, null, 20000);
+  if (rep.status === 0) throw new Error('Gemini injoignable depuis ce téléphone (' + rep.cause + ').');
   const texte = await rep.text();
   if (rep.status !== 200) throw new Error('Impossible de lister les modèles Gemini (' + rep.status + ') : ' + message(texte));
   const noms = (JSON.parse(texte).models || [])
@@ -105,7 +117,12 @@ export async function lireCarte(cle, images) {
         stock(CLE_MEMO, modele);
         return nettoyer(lireReponse(texte));
       }
-      journal.push(modele + ' ' + rep.status);
+      journal.push(modele + ' ' + (rep.status || 'réseau : ' + rep.cause));
+      if (rep.status === 0) {
+        quotaPartout = false;
+        if (essai === 0) { await new Promise(r => setTimeout(r, 1500)); continue; }
+        break;
+      }
       if (rep.status === 401 || (rep.status === 400 && /API key/i.test(texte))) {
         throw new Error('Ta clé Gemini est refusée. Change-la dans Réglages.');
       }
@@ -123,7 +140,10 @@ export async function lireCarte(cle, images) {
     }
   }
   if (quotaPartout) throw new Error('Quota gratuit Gemini atteint. Réessaie dans une minute, ou demain si la limite du jour est atteinte.');
-  throw new Error('Gemini est saturé en ce moment (' + journal.join(', ') + '). Réessaie dans une minute.');
+  if (journal.every(j => j.indexOf('réseau') >= 0)) {
+    throw new Error('Gemini ne répond pas depuis ce téléphone (' + journal[journal.length - 1] + '). Vérifie qu\'aucun bloqueur de contenu ou VPN ne filtre Google, puis réessaie.');
+  }
+  throw new Error('Gemini est saturé ou injoignable en ce moment (' + journal.join(', ') + '). Réessaie dans une minute.');
 }
 
 function lireReponse(texte) {

@@ -143,10 +143,15 @@ export async function api(url, options) {
   if (options.type) entetes['Content-Type'] = options.type;
 
   let rep;
-  try {
-    rep = await fetch(url, { method: options.methode || (corps !== undefined ? 'POST' : 'GET'), headers: entetes, body: corps });
-  } catch (e) {
-    throw new Error('Pas de connexion internet. Réessaie dans un instant.');
+  for (let essai = 0; ; essai++) {
+    try {
+      rep = await fetch(url, { method: options.methode || (corps !== undefined ? 'POST' : 'GET'), headers: entetes, body: corps });
+      break;
+    } catch (e) {
+      // Coupure réseau passagère : une seconde tentative avant d'abandonner.
+      if (essai === 0) { await new Promise(r => setTimeout(r, 1500)); continue; }
+      throw new Error('Google ' + service(url) + ' ne répond pas (' + (e.message || e.name) + '). Réessaie dans un instant.');
+    }
   }
   if (rep.status === 401) {
     ecrire(CLE_JETON, null);
@@ -164,6 +169,14 @@ export async function api(url, options) {
     throw err;
   }
   return json;
+}
+
+function service(url) {
+  if (url.indexOf('upload') >= 0 || url.indexOf('/drive/') >= 0) return 'Drive';
+  if (url.indexOf('sheets') >= 0) return 'Sheets';
+  if (url.indexOf('calendar') >= 0) return 'Agenda';
+  if (url.indexOf('gmail') >= 0) return 'Gmail';
+  return '';
 }
 
 function traduireErreur(statut, message, url) {

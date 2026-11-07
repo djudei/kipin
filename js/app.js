@@ -875,7 +875,13 @@ import * as IA from './gemini.js';
       var envoi = imgs.map(function (i) { return { data: i.data, mimeType: i.mimeType }; });
       appel(function () {
         return IA.lireCarte(S.cleGemini, envoi).then(function (lu) {
-          return D.sauverPhotos(envoi).then(function (ids) { lu.photoIds = ids; return lu; });
+          // La photo dans le Drive est un plus : si l'envoi échoue, on garde la fiche quand même.
+          return D.sauverPhotos(envoi).then(function (ids) { lu.photoIds = ids; return lu; }, function (e) {
+            if (e && e.name === 'ErreurSession') throw e;
+            lu.photoIds = [];
+            lu.photoErreur = e.message;
+            return lu;
+          });
         });
       }, 'Lecture de la carte…', function (res) {
         S.photoIds = res.photoIds || [];
@@ -886,6 +892,7 @@ import * as IA from './gemini.js';
         S.saisieManuelle = false;
         S.doublonVu = false;
         montrer('verif');
+        if (res.photoErreur) toast('Carte lue, mais la photo n\'a pas pu être rangée dans ton Drive : ' + res.photoErreur, true);
       }, {
         annulable: true,
         apresAnnulation: function (res) {
