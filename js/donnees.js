@@ -489,49 +489,97 @@ async function syncEvenement(c, r) {
 }
 
 /**
- * Rendez-vous récurrent « Kipin · relances de la semaine », chaque lundi.
- * Sa description liste, avec leurs dates, les prochaines relances cochées « Récap du lundi ».
+ * Récap du lundi : un rendez-vous par semaine (lundi 9 h) qui ne liste QUE les relances
+ * de cette semaine-là, plus celles à rattraper pour le prochain lundi.
+ * Les rendez-vous sont créés jusqu'à 12 semaines à l'avance, mis à jour quand la liste change
+ * et supprimés quand une semaine n'a plus de relance. Les lundis passés ne sont plus modifiés.
  */
 export async function syncRecap(contacts, r) {
-  const id = E.config.recapEventId || '';
-  if (!r.recapActif) {
-    if (id) { await supprimerEvenement(id); await ecrireConfig('recapEventId', ''); }
-    return;
+  let carte = {};
+  try { carte = JSON.parse(E.config.recapEvents || '{}'); } catch (e) { carte = {}; }
+  const avant = JSON.stringify(carte);
+
+  // Ancienne version : un seul rendez-vous récurrent, remplacé par un rendez-vous par semaine.
+  if (E.config.recapEventId) {
+    await supprimerEvenement(E.config.recapEventId);
+    await ecrireConfig('recapEventId', '');
   }
-  const auj = isoAuj();
-  const liste = contacts
-    .filter(c => c.statut === 'À relancer' && c.recap && c.dateRelance)
-    .sort((a, b) => (a.dateRelance < b.dateRelance ? -1 : 1))
-    .slice(0, 25);
-  const ligne = c => '• ' + dateFr(c.dateRelance) + ' — ' + nomComplet(c) + (c.societe && nomComplet(c) !== c.societe ? ' (' + c.societe + ')' : '') +
+
+  const premier = lundiRecap();
+  const limite = isoPlusJours(premier, 7 * 12);
+  const semaines = {};
+  if (r.recapActif) {
+    contacts
+      .filter(c => c.statut === 'À relancer' && c.recap && c.dateRelance)
+      .sort((a, b) => (a.dateRelance < b.dateRelance ? -1 : 1))
+      .forEach(c => {
+        let lundi = lundiDe(c.dateRelance);
+        const groupe = lundi < premier ? 'rattraper' : 'semaine';
+        if (lundi < premier) lundi = premier;
+        if (lundi > limite) return;
+        (semaines[lundi] = semaines[lundi] || { rattraper: [], semaine: [] })[groupe].push(c);
+      });
+  }
+
+  const ligne = c => '• ' + dateFr(c.dateRelance) + ' — ' + nomComplet(c) +
+    (c.societe && nomComplet(c) !== c.societe ? ' (' + c.societe + ')' : '') +
     (c.contexte ? '\n   ' + c.contexte.slice(0, 120) : '');
-  const retard = liste.filter(c => c.dateRelance < auj);
-  const avenir = liste.filter(c => c.dateRelance >= auj);
-  const texte = (liste.length
-    ? (retard.length ? 'EN RETARD\n' + retard.map(ligne).join('\n') + '\n\n' : '') +
-      (avenir.length ? 'À VENIR\n' + avenir.map(ligne).join('\n') + '\n\n' : '')
-    : 'Aucune relance prévue.\n\n') +
-    'Liste mise à jour le ' + dateFr(auj) + '. Ouvrir Kipin : ' + urlApp();
 
-  const lundi = prochainLundi();
-  const corps = Object.assign({
-    summary: 'Kipin · relances de la semaine' + (liste.length ? ' (' + liste.length + ')' : ''),
-    description: texte,
-    reminders: { useDefault: false, overrides: [{ method: 'popup', minutes: 0 }] }
-  }, horaire(lundi, 9, 15));
+  for (const lundi of Object.keys(semaines)) {
+    const s = semaines[lundi];
+    const total = s.rattraper.length + s.semaine.length;
+    const description =
+      (s.rattraper.length ? 'À RATTRAPER (prévues avant ce lundi)\n' + s.rattraper.map(ligne).join('\n') + '\n\n' : '') +
+      (s.semaine.length ? 'CETTE SEMAINE (du ' + dateFr(lundi) + ' au ' + dateFr(isoPlusJours(lundi, 6)) + ')\n' + s.semaine.map(ligne).join('\n') + '\n\n' : '') +
+      'Ouvrir Kipin : ' + urlApp();
+    const summary = 'Kipin · relances de la semaine (' + total + ')';
+    const signature = summary + '|' + description;
+    const deja = carte[lundi];
+    if (deja && deja.sig === signature) continue; // rien n'a changé : aucun appel
 
-  if (id) {
-    try {
-      // On ne touche pas aux dates pour garder la série : seulement le titre et la liste.
-      await api(AGENDA + '/' + enc(id), { methode: 'PATCH', corps: { summary: corps.summary, description: corps.description, status: 'confirmed' } });
-      return;
-    } catch (e) {
-      if (e.status !== 404 && e.status !== 410) throw e;
+    const corps = Object.assign({
+      summary, description,
+      reminders: { useDefault: false, overrides: [{ method: 'popup', minutes: 0 }] }
+    }, horaire(lundi, 9, 15));
+
+    let id = deja && deja.id;
+    if (id) {
+      try {
+        await api(AGENDA + '/' + enc(id), { methode: 'PATCH', corps: Object.assign({ status: 'confirmed' }, corps) });
+      } catch (e) {
+        if (e.status !== 404 && e.status !== 410) throw e;
+        id = '';
+      }
+    }
+    if (!id) id = (await api(AGENDA, { corps })).id;
+    carte[lundi] = { id, sig: signature };
+  }
+
+  // Semaines à venir devenues vides : on retire leur rendez-vous. Les lundis passés sont oubliés.
+  for (const lundi of Object.keys(carte)) {
+    if (lundi < premier) { delete carte[lundi]; continue; }
+    if (!semaines[lundi]) {
+      await supprimerEvenement(carte[lundi].id);
+      delete carte[lundi];
     }
   }
-  corps.recurrence = ['RRULE:FREQ=WEEKLY;BYDAY=MO'];
-  const ev = await api(AGENDA, { corps });
-  await ecrireConfig('recapEventId', ev.id);
+
+  if (JSON.stringify(carte) !== avant) await ecrireConfig('recapEvents', JSON.stringify(carte));
+}
+
+/** Lundi de la semaine d'une date (AAAA-MM-JJ). */
+function lundiDe(iso) {
+  const p = iso.split('-').map(Number);
+  const d = new Date(p[0], p[1] - 1, p[2]);
+  d.setDate(d.getDate() - ((d.getDay() + 6) % 7));
+  return isoDe(d);
+}
+
+/** Prochain récap : aujourd'hui si on est lundi avant 9 h, sinon lundi prochain. */
+function lundiRecap() {
+  const maintenant = new Date();
+  if (maintenant.getDay() === 1 && maintenant.getHours() < 9) return isoDe(maintenant);
+  return isoPlusJours(lundiDe(isoDe(maintenant)), 7);
 }
 
 /* ================= Partage du rappel par email (Gmail + .ics) ================= */
@@ -644,5 +692,4 @@ function isoDe(d) { return d.getFullYear() + '-' + String(d.getMonth() + 1).padS
 function isoAuj() { return isoDe(new Date()); }
 function isoPlusJours(iso, n) { const p = iso.split('-').map(Number); return isoDe(new Date(p[0], p[1] - 1, p[2] + Number(n || 0))); }
 function dateFr(iso) { const p = iso.split('-').map(Number); const d = new Date(p[0], p[1] - 1, p[2]); return JOURS[d.getDay()] + ' ' + d.getDate() + ' ' + MOIS[d.getMonth()]; }
-function prochainLundi() { const d = new Date(); const ecart = (8 - d.getDay()) % 7 || 7; d.setDate(d.getDate() + ecart); return isoDe(d); }
 function urlApp() { return location.origin + location.pathname; }
