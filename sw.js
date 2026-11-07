@@ -4,10 +4,10 @@
  * Réseau d'abord : une mise à jour publiée sur GitHub est prise dès qu'elle est disponible.
  * Les appels à Google et à Gemini ne passent jamais par le cache.
  */
-const CACHE = 'kipin-v9';
+const CACHE = 'kipin-v10';
 const FICHIERS = [
   './', './index.html', './css/styles.css', './manifest.webmanifest',
-  './js/app.js', './js/config.js', './js/google.js', './js/donnees.js', './js/gemini.js',
+  './js/app.js', './js/import.js', './js/config.js', './js/google.js', './js/donnees.js', './js/gemini.js',
   './icons/icon-192.png', './icons/apple-touch-icon.png'
 ];
 

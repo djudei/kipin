@@ -6,6 +6,7 @@ import { CONFIG } from './config.js';
 import * as G from './google.js';
 import * as D from './donnees.js';
 import * as IA from './gemini.js';
+import * as IM from './import.js';
 
   /* ================= État ================= */
   var S = {
@@ -34,7 +35,9 @@ import * as IA from './gemini.js';
     confirmSuppr: false,
     nouveauTag: false,
     tagEdition: null,
-    erreurConnexion: ''
+    erreurConnexion: '',
+    qr: null,
+    source: ''
   };
 
   var $ = function (id) { return document.getElementById(id); };
@@ -178,6 +181,7 @@ import * as IA from './gemini.js';
     retour: svg(22, '<path d="M15 5l-7 7 7 7"/>', 2),
     photo: svg(26, '<path d="M4 8h3l2-3h6l2 3h3a1 1 0 0 1 1 1v10a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V9a1 1 0 0 1 1-1z"/><circle cx="12" cy="13.5" r="3.5"/>'),
     album: svg(24, '<rect x="3" y="4" width="18" height="16" rx="2"/><circle cx="8.5" cy="9.5" r="1.8"/><path d="M21 16l-5.5-5.5L5 20"/>'),
+    fichier: svg(20, '<path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5"/><circle cx="12" cy="13" r="2"/><path d="M8.5 18c.6-1.6 1.9-2.4 3.5-2.4s2.9.8 3.5 2.4"/>'),
     plus: svg(20, '<path d="M12 5v14"/><path d="M5 12h14"/>', 2),
     info: svg(20, '<circle cx="12" cy="12" r="9"/><path d="M12 11v5"/><path d="M12 8h.01"/>', 2),
     ok: svg(16, '<path d="M5 12.5l4.5 4.5L19 7.5"/>', 2.4),
@@ -225,6 +229,7 @@ import * as IA from './gemini.js';
       oublierPhotos();
       S.images = { recto: null, verso: null };
       S.erreurLecture = '';
+      S.qr = null;
     }
     if (nom !== 'verif') { S.form = null; S.edition = false; }
     if (nom !== 'fiche') { S.reporter = false; S.confirmSuppr = false; }
@@ -501,12 +506,13 @@ import * as IA from './gemini.js';
   RENDUS.capture = function () {
     var r = S.images.recto, v = S.images.verso;
     $('e-capture').innerHTML =
-      '<header class="barre"><button class="icone" data-a="retour" data-v="onglet" aria-label="Retour">' + ICO.retour + '</button><h1 class="t2">Nouvelle carte</h1></header>' +
+      '<header class="barre"><button class="icone" data-a="retour" data-v="onglet" aria-label="Retour">' + ICO.retour + '</button><h1 class="t2">Nouveau contact</h1></header>' +
       '<div class="contenu pile">' +
         (S.erreurLecture
           ? '<div class="alerte" role="alert"><span class="ico">' + ICO.alerte + '</span><div class="pile" style="gap:0.5rem"><span><strong>Lecture impossible.</strong> ' + esc(S.erreurLecture) + '</span>' +
             '<div class="ligne-ajout"><button class="btn sec mini" data-a="lire">Réessayer</button><button class="btn sec mini" data-a="manuel">Saisir à la main</button></div></div></div>'
           : '') +
+        bandeauQR() +
         '<h2 class="eyebrow">Recto</h2>' +
         (r
           ? '<div class="apercu"><img src="' + r.url + '" alt="Recto de la carte"></div>' + choixPhoto('recto', true)
@@ -516,6 +522,16 @@ import * as IA from './gemini.js';
           ? '<div class="apercu"><img src="' + v.url + '" alt="Verso de la carte"><button class="pastille gauche" data-a="retirer-verso">Retirer</button></div>' + choixPhoto('verso', true)
           : choixPhoto('verso', false)) +
         '<div class="astuce"><span class="ico-bleu">' + ICO.info + '</span><span><strong>Recule un peu et zoome (×2 à ×3)</strong> : la carte doit remplir presque toute la photo et être bien nette. Trop près, le téléphone ne fait pas la mise au point. Carte à plat, sans reflet.</span></div>' +
+        '<section class="carte pile" style="gap:0.6rem">' +
+          '<h2 class="eyebrow">Ou importer un contact</h2>' +
+          '<div class="ligne-ajout">' +
+            (IM.carnetDisponible() ? '<button class="btn sec" style="flex:1" data-a="importer-carnet">' + ICO.contacts + 'Carnet d\'adresses</button>' : '') +
+            '<label class="btn sec" style="flex:1" for="in-vcf">' + ICO.fichier + 'Fichier de contact (.vcf)</label>' +
+          '</div>' +
+          '<p class="note">Pour une carte de visite électronique ou un contact reçu par message.' +
+            (estIOS() ? ' Depuis l\'app Contacts de l\'iPhone : ouvre la fiche, Partager le contact, Enregistrer dans Fichiers, puis choisis le fichier ici.' : '') +
+            ' Une carte avec un QR code de contact se lit aussi directement en photo.</p>' +
+        '</section>' +
         (S.erreurLecture ? '' : '<button class="lien" data-a="manuel">Saisir le contact à la main</button>') +
       '</div>' +
       '<div class="pied"><button class="btn pri" data-a="lire"' + (r ? '' : ' disabled') + '>Lire la carte</button></div>' +
@@ -524,8 +540,45 @@ import * as IA from './gemini.js';
       '<input type="file" accept="image/*" capture="environment" id="in-recto-photo" class="cache" tabindex="-1">' +
       '<input type="file" accept="image/*" id="in-recto-album" class="cache" tabindex="-1">' +
       '<input type="file" accept="image/*" capture="environment" id="in-verso-photo" class="cache" tabindex="-1">' +
-      '<input type="file" accept="image/*" id="in-verso-album" class="cache" tabindex="-1">';
+      '<input type="file" accept="image/*" id="in-verso-album" class="cache" tabindex="-1">' +
+      '<input type="file" accept=".vcf,text/vcard,text/x-vcard,text/directory" id="in-vcf" class="cache" tabindex="-1">';
   };
+
+  function estIOS() {
+    return /iPad|iPhone|iPod/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+  }
+
+  /** QR code trouvé sur la photo du recto : contact prêt à l'emploi, ou lien vers une carte en ligne. */
+  function bandeauQR() {
+    var q = S.qr;
+    if (!q) return '';
+    if (q.type === 'contact') {
+      var qui = [q.champs.prenom, q.champs.nom].join(' ').trim() || q.champs.societe || q.champs.email;
+      return '<div class="bandeau-ok" style="align-items:flex-start">' + ICO.ok +
+        '<div class="pile" style="gap:0.5rem;flex:1"><span><strong>QR code de contact détecté</strong> : ' + esc(qui) +
+        (q.champs.societe && q.champs.societe !== qui ? ' (' + esc(q.champs.societe) + ')' : '') + '. Pas besoin de Gemini.</span>' +
+        '<button class="btn pri mini" data-a="utiliser-qr">Utiliser ce contact</button></div></div>';
+    }
+    return '<div class="astuce"><span class="ico-bleu">' + ICO.info + '</span><div class="pile" style="gap:0.4rem"><span><strong>QR code détecté</strong> : il mène à une carte en ligne. ' +
+      'Ouvre-la, enregistre le contact (fichier .vcf), puis importe-le ci-dessous.</span>' +
+      '<a class="lien" href="' + esc(q.url) + '" target="_blank" rel="noopener">Ouvrir la carte en ligne' + ICO.externe + '</a></div></div>';
+  }
+
+  /** Ouvre la fiche de vérification avec un contact importé (carnet, fichier ou QR code). */
+  function ouvrirImport(champs, source, photoIds) {
+    if (!photoIds) { oublierPhotos(); S.images = { recto: null, verso: null }; }
+    S.photoIds = photoIds || [];
+    S.form = nouveauFormulaire(champs);
+    if (champs.contexte) S.form.contexte = champs.contexte;
+    S.incertains = [];
+    S.edition = false;
+    S.nouveauTag = false;
+    S.saisieManuelle = false;
+    S.source = source;
+    S.doublonVu = false;
+    S.qr = null;
+    montrer('verif');
+  }
 
   /** Deux boutons : appareil photo et album. pris = une photo existe déjà (boutons compacts). */
   function choixPhoto(face, pris) {
@@ -643,7 +696,10 @@ import * as IA from './gemini.js';
         '<h1 class="t2">' + (S.edition ? 'Modifier le contact' : 'Vérifie et complète') + '</h1></header>' +
       '<div class="contenu pile">' +
         (doublon ? bandeauDoublon(doublon) : '') +
-        (S.edition || S.saisieManuelle ? '' : '<div class="bandeau-ok">' + ICO.ok + '<span><strong>Carte lue.</strong> ' +
+        (S.source && !S.edition ? '<div class="bandeau-ok">' + ICO.ok + '<span><strong>' +
+          ({ carnet: 'Contact importé du carnet d\'adresses.', fichier: 'Contact importé du fichier.', qr: 'Contact lu depuis le QR code.' }[S.source] || 'Contact importé.') +
+          '</strong> Vérifie et complète avant d\'enregistrer.</span></div>' :
+         S.edition || S.saisieManuelle ? '' : '<div class="bandeau-ok">' + ICO.ok + '<span><strong>Carte lue.</strong> ' +
           (nbDoutes ? nbDoutes + (nbDoutes > 1 ? ' champs à vérifier, signalés' : ' champ à vérifier, signalé') + ' en orange.' : 'Vérifie les champs avant d\'enregistrer.') +
           '</span></div>') +
         '<section class="carte pile">' +
@@ -877,12 +933,32 @@ import * as IA from './gemini.js';
     'ouvrir': function (v) { S.courantId = v; aller('fiche'); },
 
     'nouveau-scan': function () {
+      S.qr = null;
+      S.source = '';
       S.images = { recto: null, verso: null };
       S.photoIds = [];
       S.erreurLecture = '';
       aller('capture');
     },
     'retirer-verso': function () { S.images.verso = null; RENDUS.capture(); },
+    'importer-carnet': function () {
+      IM.choisirDansCarnet().then(function (champs) {
+        if (champs) ouvrirImport(champs, 'carnet');
+      }, function (e) {
+        toast('Impossible d\'ouvrir le carnet d\'adresses : ' + messageErreur(e), true);
+      });
+    },
+    'utiliser-qr': function () {
+      if (!S.qr || S.qr.type !== 'contact') return;
+      var champs = S.qr.champs;
+      var imgs = [S.images.recto, S.images.verso].filter(Boolean).map(function (i) { return { data: i.data, mimeType: i.mimeType }; });
+      oublierPhotos();
+      appel(function () {
+        return D.sauverPhotos(imgs).catch(function (e) { if (e && e.name === 'ErreurSession') throw e; return []; });
+      }, 'Enregistrement de la photo…', function (ids) {
+        ouvrirImport(champs, 'qr', ids);
+      });
+    },
     'manuel': function () {
       oublierPhotos();
       S.form = nouveauFormulaire({});
@@ -890,6 +966,7 @@ import * as IA from './gemini.js';
       S.edition = false;
       S.nouveauTag = false;
       S.saisieManuelle = true;
+      S.source = '';
       S.doublonVu = false;
       S.erreurLecture = '';
       montrer('verif');
@@ -925,6 +1002,7 @@ import * as IA from './gemini.js';
         S.edition = false;
         S.nouveauTag = false;
         S.saisieManuelle = false;
+        S.source = '';
         S.doublonVu = false;
         montrer('verif');
         if (res.photoErreur) toast('Carte lue, mais la photo n\'a pas pu être rangée dans ton Drive : ' + res.photoErreur, true);
@@ -1143,8 +1221,24 @@ import * as IA from './gemini.js';
       preparerImage(fichier, function (img) {
         S.images[face] = img;
         S.erreurLecture = '';
+        if (face === 'recto') S.qr = null;
         RENDUS.capture();
+        if (face === 'recto') {
+          IM.chercherQR(img.url).then(function (q) {
+            if (q && S.images.recto === img) { S.qr = q; if (S.ecran === 'capture') RENDUS.capture(); }
+          });
+        }
       });
+    }
+    if (el.id === 'in-vcf') {
+      var vcf = el.files && el.files[0];
+      if (!vcf) return;
+      vcf.text().then(function (texte) {
+        var cartes = IM.lireVcard(texte);
+        if (!cartes.length) { toast('Aucun contact trouvé dans ce fichier.', true); return; }
+        ouvrirImport(cartes[0], 'fichier');
+        if (cartes.length > 1) toast('Ce fichier contient ' + cartes.length + ' contacts : seul le premier est importé.');
+      }, function () { toast('Impossible de lire ce fichier.', true); });
     }
   });
 
