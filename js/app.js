@@ -597,7 +597,7 @@ import * as IA from './gemini.js';
     var doublon = trouverDoublon(f);
     if (doublon) S.doublonVu = true;
     var sansRelance = !f.dateRelance;
-    var raccourcis = [7, 15, 30, 60].map(function (n) {
+    var raccourcis = [7, 15, 30].map(function (n) {
       var actif = f.dateRelance === plusJours(auj(), n);
       return '<button class="puce' + (actif ? ' plein' : '') + '" data-a="delai" data-v="' + n + '">J+' + n + '</button>';
     }).join('') +

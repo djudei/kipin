@@ -57,6 +57,9 @@ export async function charger() {
   E.config = {};
   configBrut.forEach(l => { if (l[0]) E.config[l[0]] = l[1] || ''; });
   E.dossierId = E.config.dossierPhotos || '';
+  if (E.config.format !== '2' && E.gidContacts !== null) {
+    try { await reparerFormat(); } catch (e) { /* esthétique seulement : on continue */ }
+  }
 
   return {
     email: E.email,
@@ -67,6 +70,20 @@ export async function charger() {
     reglages: lireReglages(),
     cleGemini: E.config.gemini || ''
   };
+}
+
+/** Texte noir sans fond sur tout l'onglet Contacts, en-tête en gras. */
+async function reparerFormat() {
+  const noir = { red: 0, green: 0, blue: 0 };
+  await api(SHEETS + '/' + E.sheetId + ':batchUpdate', {
+    corps: {
+      requests: [
+        { repeatCell: { range: { sheetId: E.gidContacts }, cell: { userEnteredFormat: { textFormat: { bold: false, foregroundColor: noir } } }, fields: 'userEnteredFormat(backgroundColor,textFormat.bold,textFormat.foregroundColor)' } },
+        { repeatCell: { range: { sheetId: E.gidContacts, startRowIndex: 0, endRowIndex: 1 }, cell: { userEnteredFormat: { textFormat: { bold: true } } }, fields: 'userEnteredFormat.textFormat.bold' } }
+      ]
+    }
+  });
+  await ecrireConfig('format', '2');
 }
 
 async function creerSheet() {
@@ -88,7 +105,7 @@ async function creerSheet() {
       data: [
         { range: 'Contacts!A1', values: [COLONNES.map(c => c[1])] },
         { range: 'Réglages!A1', values: [['Tags', "Emails d'invitation"]].concat(CONFIG.TAGS_DEFAUT.map(t => [t, ''])) },
-        { range: 'Config!A1', values: [['Clé', 'Valeur'], ['version', '1']] }
+        { range: 'Config!A1', values: [['Clé', 'Valeur'], ['version', '1'], ['format', '2']] }
       ]
     }
   });
@@ -97,8 +114,8 @@ async function creerSheet() {
       requests: [{
         repeatCell: {
           range: { sheetId: gid, startRowIndex: 0, endRowIndex: 1 },
-          cell: { userEnteredFormat: { textFormat: { bold: true, foregroundColor: { red: 1, green: 1, blue: 1 } }, backgroundColor: { red: 0.055, green: 0.09, blue: 0.15 } } },
-          fields: 'userEnteredFormat(textFormat,backgroundColor)'
+          cell: { userEnteredFormat: { textFormat: { bold: true } } },
+          fields: 'userEnteredFormat.textFormat.bold'
         }
       }]
     }
@@ -223,7 +240,7 @@ export async function enregistrerContact(c, photoIds, reglages) {
   c.photoIds = (photoIds || []).join(',');
   c.photo = photoIds && photoIds.length ? await renommerPhotos(photoIds, c) : '';
   await syncEvenement(c, reglages);
-  await api(SHEETS + '/' + E.sheetId + '/values/' + enc('Contacts!A1') + ':append?valueInputOption=RAW&insertDataOption=INSERT_ROWS', {
+  await api(SHEETS + '/' + E.sheetId + '/values/' + enc('Contacts!A1') + ':append?valueInputOption=RAW&insertDataOption=OVERWRITE', {
     corps: { values: [contactVersLigne(c)] }
   });
   await partagerSiBesoin(c, reglages);
