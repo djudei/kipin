@@ -453,7 +453,7 @@ import * as IA from './gemini.js';
   }
 
   RENDUS.rappels = function () {
-    var aFaire = S.contacts.filter(function (c) { return c.statut === 'À relancer'; })
+    var aFaire = S.contacts.filter(function (c) { return c.statut === 'À relancer' && c.dateRelance; })
       .sort(function (x, y) { return (x.dateRelance || '9999') < (y.dateRelance || '9999') ? -1 : 1; });
     var corps = '';
     var courant = null;
@@ -514,7 +514,7 @@ import * as IA from './gemini.js';
         (v
           ? '<div class="apercu"><img src="' + v.url + '" alt="Verso de la carte"><button class="pastille gauche" data-a="retirer-verso">Retirer</button><label class="pastille" for="in-verso">Reprendre</label></div>'
           : '<label class="depot" for="in-verso">' + ICO.plus + '<span>Ajouter le verso</span></label>') +
-        '<div class="astuce"><span class="ico-bleu">' + ICO.info + '</span><span>Cadre serré : la carte doit remplir presque toute la photo, bien à plat, sans reflet.</span></div>' +
+        '<div class="astuce"><span class="ico-bleu">' + ICO.info + '</span><span><strong>Recule un peu et zoome (×2 à ×3)</strong> : la carte doit remplir presque toute la photo et être bien nette. Trop près, l\'iPhone ne fait pas la mise au point. Carte à plat, sans reflet.</span></div>' +
         (S.erreurLecture ? '' : '<button class="lien" data-a="manuel">Saisir le contact à la main</button>') +
       '</div>' +
       '<div class="pied"><button class="btn pri" data-a="lire"' + (r ? '' : ' disabled') + '>Lire la carte</button></div>' +
@@ -596,10 +596,12 @@ import * as IA from './gemini.js';
     var nbDoutes = S.incertains.length;
     var doublon = trouverDoublon(f);
     if (doublon) S.doublonVu = true;
+    var sansRelance = !f.dateRelance;
     var raccourcis = [7, 15, 30, 60].map(function (n) {
       var actif = f.dateRelance === plusJours(auj(), n);
       return '<button class="puce' + (actif ? ' plein' : '') + '" data-a="delai" data-v="' + n + '">J+' + n + '</button>';
-    }).join('');
+    }).join('') +
+      '<button class="puce' + (sansRelance ? ' plein' : '') + '" data-a="sans-relance" aria-label="Aucune relance"' + (sansRelance ? ' aria-pressed="true"' : '') + '>Ø Aucune</button>';
     var tags = S.tags.map(function (t) {
       return '<button class="puce' + (f.tag === t ? ' actif' : '') + '" data-a="tag" data-v="' + esc(t) + '"' + (f.tag === t ? ' aria-pressed="true"' : '') + '>' + esc(t) + '</button>';
     }).join('');
@@ -643,7 +645,11 @@ import * as IA from './gemini.js';
         '</section>' +
         '<section class="carte pile">' +
           '<h2 class="eyebrow">Relance</h2>' +
-          '<label class="champ">Date · ' + esc(heureTxt()) + ', ' + esc(S.reglages.duree) + ' min<input type="date" data-f="dateRelance" value="' + esc(f.dateRelance) + '"></label>' +
+          (sansRelance
+            ? '<input type="hidden" data-f="dateRelance" value="">' +
+              '<div class="puces">' + raccourcis + '</div>' +
+              '<p class="note">Aucune relance : le contact est simplement enregistré, sans rappel ni événement Agenda.</p>'
+            : '<label class="champ">Date · ' + esc(heureTxt()) + ', ' + esc(S.reglages.duree) + ' min<input type="date" data-f="dateRelance" value="' + esc(f.dateRelance) + '"></label>' +
           '<div class="puces">' + raccourcis + '</div>' +
           '<label class="case"><input type="checkbox" data-f="agenda"' + (f.agenda ? ' checked' : '') + '><span>Événement Google Agenda<small>Notification sur le téléphone le jour J</small></span></label>' +
           '<label class="case"><input type="checkbox" data-f="recap"' + (f.recap ? ' checked' : '') + '><span>Récap du lundi<small>Dans le rendez-vous « relances de la semaine » de ton Agenda</small></span></label>' +
@@ -652,7 +658,7 @@ import * as IA from './gemini.js';
               '<input data-f="invites" type="text" inputmode="email" autocapitalize="off" autocorrect="off" placeholder="adresse@exemple.fr" value="' + esc(f.invites || '') + '"></label>' +
             carnet +
             '<p class="note">Envoie un email avec le rendez-vous en pièce jointe, à ajouter à n\'importe quel agenda. Plusieurs adresses : sépare-les par une virgule.</p>' +
-          '</div>' +
+          '</div>') +
         '</section>' +
       '</div>' +
       '<div class="espace"></div>' +
@@ -690,7 +696,7 @@ import * as IA from './gemini.js';
           '<div class="puces">' + [7, 15, 30].map(function (n) { return '<button class="puce" data-a="report-rapide" data-v="' + n + '">Dans ' + n + ' j</button>'; }).join('') + '</div>' +
           '<div class="grille2"><button class="btn sec" data-a="annuler-report">Annuler</button><button class="btn pri mini" style="width:100%" data-a="valider-report">Valider</button></div>' +
         '</div>'
-      : '<button class="btn sec" data-a="ouvrir-report">Reporter la relance</button>';
+      : '<button class="btn sec" data-a="ouvrir-report">' + (c.dateRelance ? 'Reporter la relance' : 'Programmer une relance') + '</button>';
     var coordCarte = [c.email, c.telephone].filter(Boolean).map(esc).join('<br>');
 
     $('e-fiche').innerHTML =
@@ -715,7 +721,7 @@ import * as IA from './gemini.js';
         '<section class="carte pile">' +
           '<div class="entete-carte"><h2 class="eyebrow">Relance</h2>' +
             (c.eventId ? '<span class="agenda-ok">' + ICO.ok + 'Dans l\'agenda</span>' : '') + '</div>' +
-          '<span class="grosse-date">' + (c.dateRelance ? esc(dateLongue(c.dateRelance)) + ' · ' + esc(heureTxt()) : 'Pas de date') +
+          '<span class="grosse-date">' + (c.dateRelance ? esc(dateLongue(c.dateRelance)) + ' · ' + esc(heureTxt()) : 'Aucune relance prévue') +
             (enRetard(c) ? ' <span class="badge retard">En retard</span>' : '') + '</span>' +
           (c.invites ? '<span class="note">Rappel partagé avec ' + esc(c.invites) + '</span>' : '') +
           '<div class="seg c3" role="group" aria-label="Statut">' +
@@ -929,7 +935,20 @@ import * as IA from './gemini.js';
     },
     'prio': function (v) { lireForm(); S.form.priorite = v; RENDUS.verif(); },
     'tag': function (v) { lireForm(); S.form.tag = S.form.tag === v ? '' : v; RENDUS.verif(); },
-    'delai': function (v) { lireForm(); S.form.dateRelance = plusJours(auj(), v); RENDUS.verif(); },
+    'delai': function (v) {
+      lireForm();
+      if (!S.form.dateRelance) { S.form.agenda = S.reglages.agendaDefaut !== false; S.form.recap = S.reglages.recapDefaut !== false; }
+      S.form.dateRelance = plusJours(auj(), v);
+      RENDUS.verif();
+    },
+    'sans-relance': function () {
+      lireForm();
+      S.form.dateRelance = '';
+      S.form.agenda = false;
+      S.form.recap = false;
+      S.form.invites = '';
+      RENDUS.verif();
+    },
     'carnet-toggle': function (v) {
       lireForm();
       var l = listeEmails(S.form.invites);
@@ -955,7 +974,6 @@ import * as IA from './gemini.js';
       lireForm();
       var f = S.form;
       if (!f.prenom && !f.nom && !f.societe && !f.email) { toast('Renseigne au moins un nom, une société ou un email.', true); return; }
-      if (!f.dateRelance) { toast('Choisis une date de relance.', true); return; }
       if (!S.doublonVu && trouverDoublon(f)) {
         RENDUS.verif();
         window.scrollTo(0, 0);

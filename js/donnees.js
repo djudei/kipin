@@ -183,7 +183,15 @@ function normaliser(c, reglages) {
   p.priorite = PRIORITES.indexOf(c.priorite) >= 0 ? c.priorite : 'Moyenne';
   p.agenda = c.agenda === true;
   p.recap = c.recap === true;
-  p.dateRelance = /^\d{4}-\d{2}-\d{2}$/.test(String(c.dateRelance)) ? c.dateRelance : isoPlusJours(isoAuj(), reglages.delai);
+  // Date vide = « Aucune relance » choisie : ni événement, ni récap, ni partage.
+  if (c.dateRelance === '') {
+    p.dateRelance = '';
+    p.agenda = false;
+    p.recap = false;
+    p.invites = '';
+  } else {
+    p.dateRelance = /^\d{4}-\d{2}-\d{2}$/.test(String(c.dateRelance)) ? c.dateRelance : isoPlusJours(isoAuj(), reglages.delai);
+  }
   if (!p.prenom && !p.nom && !p.societe && !p.email) throw new Error('Renseigne au moins un nom, une société ou un email.');
   return p;
 }
