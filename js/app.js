@@ -785,7 +785,7 @@ import * as IA from './gemini.js';
         '</section>' +
         '<section class="carte pile">' +
           '<h2 class="eyebrow">Récap du lundi</h2>' +
-          '<label class="case"><input type="checkbox" data-r="recapActif"' + (r.recapActif ? ' checked' : '') + '><span>Rendez-vous « relances de la semaine »<small>Chaque lundi à 9 h dans ton Agenda, avec uniquement les relances de la semaine et celles à rattraper.</small></span></label>' +
+          '<label class="case"><input type="checkbox" data-r="recapActif"' + (r.recapActif ? ' checked' : '') + '><span>Rendez-vous « relances de la semaine »<small>Chaque lundi à 8 h 45 dans ton Agenda, juste avant les relances du jour,, avec uniquement les relances de la semaine et celles à rattraper.</small></span></label>' +
         '</section>' +
         '<button class="btn pri" data-a="sauver-reglages">Enregistrer les réglages</button>' +
         '<section class="carte pile" style="gap:0.4rem">' +

@@ -449,9 +449,10 @@ function descriptionEvenement(c) {
   return l.join('\n');
 }
 
-function horaire(iso, heure, duree) {
-  const debut = iso + 'T' + String(heure).padStart(2, '0') + ':00:00';
-  const d = new Date(Number(iso.slice(0, 4)), Number(iso.slice(5, 7)) - 1, Number(iso.slice(8, 10)), heure, 0, 0);
+function horaire(iso, heure, duree, minute) {
+  minute = minute || 0;
+  const debut = iso + 'T' + String(heure).padStart(2, '0') + ':' + String(minute).padStart(2, '0') + ':00';
+  const d = new Date(Number(iso.slice(0, 4)), Number(iso.slice(5, 7)) - 1, Number(iso.slice(8, 10)), heure, minute, 0);
   const f = new Date(d.getTime() + duree * 60000);
   const fin = isoDe(f) + 'T' + String(f.getHours()).padStart(2, '0') + ':' + String(f.getMinutes()).padStart(2, '0') + ':00';
   return { start: { dateTime: debut, timeZone: fuseau() }, end: { dateTime: fin, timeZone: fuseau() } };
@@ -489,7 +490,7 @@ async function syncEvenement(c, r) {
 }
 
 /**
- * Récap du lundi : un rendez-vous par semaine (lundi 9 h) qui ne liste QUE les relances
+ * Récap du lundi : un rendez-vous par semaine (lundi 8 h 45) qui ne liste QUE les relances
  * de cette semaine-là, plus celles à rattraper pour le prochain lundi.
  * Les rendez-vous sont créés jusqu'à 12 semaines à l'avance, mis à jour quand la liste change
  * et supprimés quand une semaine n'a plus de relance. Les lundis passés ne sont plus modifiés.
@@ -533,14 +534,14 @@ export async function syncRecap(contacts, r) {
       (s.semaine.length ? 'CETTE SEMAINE (du ' + dateFr(lundi) + ' au ' + dateFr(isoPlusJours(lundi, 6)) + ')\n' + s.semaine.map(ligne).join('\n') + '\n\n' : '') +
       'Ouvrir Kipin : ' + urlApp();
     const summary = 'Kipin · relances de la semaine (' + total + ')';
-    const signature = summary + '|' + description;
+    const signature = HEURE_RECAP + '|' + summary + '|' + description;
     const deja = carte[lundi];
     if (deja && deja.sig === signature) continue; // rien n'a changé : aucun appel
 
     const corps = Object.assign({
       summary, description,
       reminders: { useDefault: false, overrides: [{ method: 'popup', minutes: 0 }] }
-    }, horaire(lundi, 9, 15));
+    }, horaire(lundi, 8, 15, 45));
 
     let id = deja && deja.id;
     if (id) {
@@ -567,6 +568,9 @@ export async function syncRecap(contacts, r) {
   if (JSON.stringify(carte) !== avant) await ecrireConfig('recapEvents', JSON.stringify(carte));
 }
 
+/** Heure du récap : 8 h 45, juste avant les relances du jour (9 h par défaut). */
+const HEURE_RECAP = '08:45';
+
 /** Lundi de la semaine d'une date (AAAA-MM-JJ). */
 function lundiDe(iso) {
   const p = iso.split('-').map(Number);
@@ -575,10 +579,10 @@ function lundiDe(iso) {
   return isoDe(d);
 }
 
-/** Prochain récap : aujourd'hui si on est lundi avant 9 h, sinon lundi prochain. */
+/** Prochain récap : aujourd'hui si on est lundi avant 8 h 45, sinon lundi prochain. */
 function lundiRecap() {
   const maintenant = new Date();
-  if (maintenant.getDay() === 1 && maintenant.getHours() < 9) return isoDe(maintenant);
+  if (maintenant.getDay() === 1 && maintenant.getHours() * 60 + maintenant.getMinutes() < 8 * 60 + 45) return isoDe(maintenant);
   return isoPlusJours(lundiDe(isoDe(maintenant)), 7);
 }
 
