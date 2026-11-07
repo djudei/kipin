@@ -6,7 +6,7 @@
  * Il n'est pas secret : il identifie l'app auprès de Google, rien de plus.
  */
 export const CONFIG = {
-  CLIENT_ID: 'A_REMPLACER.apps.googleusercontent.com',
+  CLIENT_ID: '648065562846-mdlt3snn9al3bi9o4glvpvofoivbs67l.apps.googleusercontent.com',
 
   NOM_SHEET: 'Kipin – Contacts',
   NOM_DOSSIER: 'Kipin – Photos',
