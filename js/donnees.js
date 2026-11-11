@@ -26,7 +26,7 @@ export const PRIORITES = ['Haute', 'Moyenne', 'Basse'];
 const CHAMPS_CARTE = ['prenom', 'nom', 'societe', 'poste', 'email', 'telephone', 'fixe', 'standard', 'site', 'linkedin', 'adresse'];
 
 /* Espace de l'utilisateur, rempli par charger() */
-const E = { sheetId: '', gidContacts: null, dossierId: '', dossierNotesId: '', config: {}, email: '' };
+const E = { sheetId: '', gidContacts: null, racineId: '', dossierId: '', dossierNotesId: '', config: {}, email: '' };
 
 const fuseau = () => Intl.DateTimeFormat().resolvedOptions().timeZone || 'Europe/Paris';
 const enc = encodeURIComponent;
@@ -58,6 +58,10 @@ export async function charger() {
   configBrut.forEach(l => { if (l[0]) E.config[l[0]] = l[1] || ''; });
   E.dossierId = E.config.dossierPhotos || '';
   E.dossierNotesId = E.config.dossierNotes || '';
+  E.racineId = E.config.dossierKipin || '';
+  if (E.config.rangement !== '1') {
+    try { await rangerDrive(); } catch (e) { /* rangement seulement : réessayé au prochain lancement */ }
+  }
   if (E.config.format !== '2' && E.gidContacts !== null) {
     try { await reparerFormat(); } catch (e) { /* esthétique seulement : on continue */ }
   }
@@ -114,6 +118,7 @@ async function reparerFormat() {
 }
 
 async function creerSheet() {
+  const racine = await dossierRacine(false);
   const ss = await api(SHEETS, {
     corps: {
       properties: { title: CONFIG.NOM_SHEET, locale: 'fr_FR' },
@@ -132,7 +137,7 @@ async function creerSheet() {
       data: [
         { range: 'Contacts!A1', values: [COLONNES.map(c => c[1])] },
         { range: 'Réglages!A1', values: [['Tags', "Emails d'invitation"]].concat(CONFIG.TAGS_DEFAUT.map(t => [t, ''])) },
-        { range: 'Config!A1', values: [['Clé', 'Valeur'], ['version', '1'], ['format', '2']] }
+        { range: 'Config!A1', values: [['Clé', 'Valeur'], ['version', '1'], ['format', '2'], ['dossierKipin', racine], ['rangement', '1']] }
       ]
     }
   });
@@ -148,6 +153,7 @@ async function creerSheet() {
     }
   });
   await api(DRIVE + '/' + E.sheetId, { methode: 'PATCH', corps: { appProperties: { kipin: 'contacts' } } });
+  await deplacer(E.sheetId, racine);
 }
 
 /* ================= Config (onglet caché) ================= */
@@ -263,7 +269,7 @@ async function ecrireLigne(ligne, c) {
   });
 }
 
-/** note (facultative) = { blob, mime } : envoyée dans « Kipin – Notes » avec le contact. */
+/** note (facultative) = { blob, mime } : envoyée dans « Kipin › Notes vocales » avec le contact. */
 export async function enregistrerContact(c, photoIds, reglages, note) {
   c = normaliser(c, reglages);
   c.id = (crypto.randomUUID ? crypto.randomUUID() : String(Date.now()) + Math.random().toString(16).slice(2));
@@ -417,7 +423,53 @@ export async function supprimerDuCarnet(email) {
 
 /* ================= Photos et notes vocales (Drive) ================= */
 
-/** Dossier Kipin du Drive (créé au premier besoin, recréé s'il a été supprimé). */
+/*
+ * Rangement du Drive : un dossier « Kipin » contient le Sheet « Kipin – Contacts »,
+ * le dossier « Photos des cartes » et le dossier « Notes vocales ».
+ */
+const DOSSIER = 'application/vnd.google-apps.folder';
+
+/** Dossier « Kipin » : retrouvé (même après un nouveau lancement sur un autre téléphone), sinon créé. memoriser = l'écrire dans Config. */
+async function dossierRacine(memoriser) {
+  if (E.racineId) {
+    try {
+      const f = await api(DRIVE + '/' + E.racineId + '?fields=id,trashed');
+      if (!f.trashed) return E.racineId;
+    } catch (e) { /* supprimé : on le recrée */ }
+  }
+  const trouves = await api(DRIVE + '?spaces=drive&fields=files(id)&q=' +
+    enc("appProperties has { key='kipin' and value='racine' } and trashed=false"));
+  E.racineId = trouves.files && trouves.files.length ? trouves.files[0].id
+    : (await api(DRIVE + '?fields=id', { corps: { name: CONFIG.NOM_RACINE, mimeType: DOSSIER, appProperties: { kipin: 'racine' } } })).id;
+  if (memoriser !== false) await ecrireConfig('dossierKipin', E.racineId);
+  return E.racineId;
+}
+
+/** Met le fichier dans le dossier parent (et le retire de son ancien emplacement). */
+async function deplacer(id, parent) {
+  const f = await api(DRIVE + '/' + id + '?fields=parents,trashed');
+  if (f.trashed) return;
+  const anciens = (f.parents || []).filter(p => p !== parent);
+  if ((f.parents || []).indexOf(parent) >= 0 && !anciens.length) return;
+  await api(DRIVE + '/' + id + '?fields=id&addParents=' + enc(parent) + (anciens.length ? '&removeParents=' + enc(anciens.join(',')) : ''), { methode: 'PATCH', corps: {} });
+}
+
+/** Sheets créés avant le dossier « Kipin » : le Sheet et les dossiers de photos et de notes y sont rangés, une seule fois. */
+async function rangerDrive() {
+  const racine = await dossierRacine();
+  await deplacer(E.sheetId, racine);
+  const sous = [[E.dossierId, CONFIG.NOM_DOSSIER], [E.dossierNotesId, CONFIG.NOM_DOSSIER_NOTES]];
+  for (const [id, nom] of sous) {
+    if (!id) continue;
+    try {
+      await deplacer(id, racine);
+      await api(DRIVE + '/' + id + '?fields=id', { methode: 'PATCH', corps: { name: nom } });
+    } catch (e) { /* dossier supprimé à la main : il sera recréé au besoin */ }
+  }
+  await ecrireConfig('rangement', '1');
+}
+
+/** Sous-dossier de « Kipin » (créé au premier besoin, recréé s'il a été supprimé). */
 async function dossier(champ, cleConfig, nom, marque) {
   if (E[champ]) {
     try {
@@ -425,8 +477,9 @@ async function dossier(champ, cleConfig, nom, marque) {
       if (!f.trashed) return E[champ];
     } catch (e) { /* dossier supprimé : on le recrée */ }
   }
+  const racine = await dossierRacine();
   const d = await api(DRIVE + '?fields=id', {
-    corps: { name: nom, mimeType: 'application/vnd.google-apps.folder', appProperties: { kipin: marque } }
+    corps: { name: nom, mimeType: DOSSIER, parents: [racine], appProperties: { kipin: marque } }
   });
   E[champ] = d.id;
   await ecrireConfig(cleConfig, d.id);
@@ -448,7 +501,7 @@ function envoiMultipart(meta, blob, mime) {
 
 const EXT_NOTE = mime => (/mp4|aac/.test(mime) ? 'm4a' : /ogg/.test(mime) ? 'ogg' : 'webm');
 
-/** note = { blob, mime } → { id, lien } dans « Kipin – Notes », nommée d'après le contact. */
+/** note = { blob, mime } → { id, lien } dans « Kipin › Notes vocales », nommée d'après le contact. */
 async function sauverNote(note, c) {
   const parent = await dossierNotes();
   const jour = isoAuj();

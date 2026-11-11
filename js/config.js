@@ -12,8 +12,9 @@ export const CONFIG = {
   EMAIL_AIDE: 'julienm.app@gmail.com', // adresse du lien « Un souci ? »
 
   NOM_SHEET: 'Kipin – Contacts',
-  NOM_DOSSIER: 'Kipin – Photos',
-  NOM_DOSSIER_NOTES: 'Kipin – Notes',
+  NOM_RACINE: 'Kipin',                // dossier du Drive qui contient tout : le Sheet, les photos, les notes
+  NOM_DOSSIER: 'Photos des cartes',
+  NOM_DOSSIER_NOTES: 'Notes vocales',
   TAGS_DEFAUT: ['Client', 'Prospect', 'Partenaire', 'Fournisseur', 'Presse'],
 
   REGLAGES_DEFAUT: {
