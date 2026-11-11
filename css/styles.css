@@ -441,3 +441,13 @@
   .apercu { border-radius: 0; background: var(--scan); }
   .apercu img { border-radius: 0; }
   .pastille { border-radius: 0; font-weight: 500; letter-spacing: 0.1em; text-transform: uppercase; font-size: 0.64rem; }
+
+/* Note vocale */
+.note-rec { display: flex; align-items: center; gap: 0.75rem; min-height: 44px; }
+.rec-point { width: 10px; height: 10px; border-radius: 50%; background: var(--bleu); flex-shrink: 0; animation: rec-clignote 1.2s ease-in-out infinite; }
+.note-temps { flex: 1; font-variant-numeric: tabular-nums; font-size: 0.94rem; letter-spacing: 0.04em; }
+.note-lecteur { display: flex; align-items: center; gap: 1rem; flex-wrap: wrap; }
+.note-lecteur .note-play { min-width: 9.5rem; font-variant-numeric: tabular-nums; }
+.note-lecteur .note-play svg { width: 14px; height: 14px; }
+@keyframes rec-clignote { 50% { opacity: 0.25; } }
+@media (prefers-reduced-motion: reduce) { .rec-point { animation: none; } }

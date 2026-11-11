@@ -13,6 +13,7 @@ export const CONFIG = {
 
   NOM_SHEET: 'Kipin – Contacts',
   NOM_DOSSIER: 'Kipin – Photos',
+  NOM_DOSSIER_NOTES: 'Kipin – Notes',
   TAGS_DEFAUT: ['Client', 'Prospect', 'Partenaire', 'Fournisseur', 'Presse'],
 
   REGLAGES_DEFAUT: {

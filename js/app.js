@@ -8,6 +8,7 @@ import * as D from './donnees.js';
 import * as IA from './gemini.js';
 import * as IM from './import.js';
 import * as AT from './attente.js';
+import * as NOTE from './note.js';
 
   /* ================= État ================= */
   var S = {
@@ -40,7 +41,11 @@ import * as AT from './attente.js';
     qr: null,
     source: '',
     attente: [],      // cartes photographiées pas encore lues (gardées dans le téléphone)
-    attenteId: null   // carte en attente en cours de lecture
+    attenteId: null,  // carte en attente en cours de lecture
+    note: null,       // note vocale enregistrée sur l'écran de vérification, envoyée avec le contact
+    noteFiche: null,  // note enregistrée sur une fiche mais pas encore envoyée (réseau) : { id, note }
+    noteEcran: '',    // écran où le micro enregistre
+    confirmNote: false
   };
 
   var $ = function (id) { return document.getElementById(id); };
@@ -176,7 +181,10 @@ import * as AT from './attente.js';
     rappels: svg(24, '<path d="M6 9a6 6 0 0 1 12 0c0 5 2 6.5 2 6.5H4S6 14 6 9z"/><path d="M10 19a2 2 0 0 0 4 0"/>'),
     reglages: svg(24, '<path d="M4 7h9"/><path d="M17 7h3"/><circle cx="15" cy="7" r="2"/><path d="M4 17h3"/><path d="M11 17h9"/><circle cx="9" cy="17" r="2"/>'),
     crayon: svg(18, '<path d="M4 20h4L19 9l-4-4L4 16z"/><path d="M13.5 6.5l4 4"/>'),
-    croix: svg(18, '<path d="M6 6l12 12"/><path d="M18 6L6 18"/>', 2)
+    croix: svg(18, '<path d="M6 6l12 12"/><path d="M18 6L6 18"/>', 2),
+    micro: svg(20, '<rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5.5 11a6.5 6.5 0 0 0 13 0"/><path d="M12 17.5V21"/>'),
+    lecture: svg(16, '<path d="M7 5l12 7-12 7z"/>'),
+    pause: svg(16, '<path d="M8 5v14"/><path d="M16 5v14"/>', 2.4)
   };
 
   /* ================= Navigation et historique ================= */
@@ -186,6 +194,11 @@ import * as AT from './attente.js';
 
   /** Affiche un écran sans toucher au formulaire en cours. mode : 'push' | 'replace' | 'none'. */
   function montrer(nom, mode) {
+    if (S.ecran !== nom) {
+      if (NOTE.enCours()) NOTE.abandonner();
+      NOTE.stopperLecture();
+      S.confirmNote = false;
+    }
     if (ONGLETS.indexOf(nom) >= 0) S.onglet = nom;
     ECRANS.forEach(function (e) { $('e-' + e).hidden = e !== nom; });
     S.ecran = nom;
@@ -212,7 +225,7 @@ import * as AT from './attente.js';
       S.qr = null;
       S.attenteId = null;
     }
-    if (nom !== 'verif') { S.form = null; S.edition = false; }
+    if (nom !== 'verif') { S.form = null; S.edition = false; oublierNoteLocale(); }
     if (nom !== 'fiche') { S.reporter = false; S.confirmSuppr = false; }
     montrer(nom, mode);
   }
@@ -799,6 +812,7 @@ import * as AT from './attente.js';
 
   function nouveauFormulaire(champs) {
     champs = champs || {};
+    oublierNoteLocale();
     return {
       prenom: champs.prenom || '', nom: champs.nom || '', societe: champs.societe || '', poste: champs.poste || '',
       email: champs.email || '', telephone: champs.telephone || '', fixe: champs.fixe || '', standard: champs.standard || '', site: champs.site || '',
@@ -826,6 +840,78 @@ import * as AT from './attente.js';
     if (!q) return '';
     return '<a class="lien" href="' + esc(urlRechercheLinkedin(f)) + '" target="_blank" rel="noopener">' + ICO.loupe +
       '<span>Chercher « ' + esc(q) + ' » sur LinkedIn</span></a>';
+  }
+
+  /* ================= Note vocale ================= */
+  function oublierNoteLocale() {
+    if (S.note) { NOTE.oublier(S.note.cle); URL.revokeObjectURL(S.note.url); }
+    S.note = null;
+  }
+
+  /** Note affichée sur l'écran ou : { cle, source(), duree } ou null. */
+  function noteAffichee(ou, c) {
+    if (ou === 'verif') return S.note ? { cle: S.note.cle, source: function () { return Promise.resolve(S.note.url); }, duree: S.note.duree, locale: true } : null;
+    if (S.noteFiche && c && S.noteFiche.id === c.id) {
+      var n = S.noteFiche.note;
+      return { cle: n.cle, source: function () { return Promise.resolve(n.url); }, duree: n.duree, locale: true, enAttente: true };
+    }
+    if (c && c.noteId) return { cle: c.noteId, source: function () { return D.lireNote(c.noteId); }, duree: 0 };
+    return null;
+  }
+
+  function libelleLecture(cle, duree, enCours, position, longueur) {
+    if (NOTE.chargement(cle)) return ICO.lecture + 'Chargement…';
+    var total = longueur || duree;
+    if (enCours) return ICO.pause + NOTE.duree(position) + (total ? ' / ' + NOTE.duree(total) : '');
+    return ICO.lecture + 'Écouter' + (total ? ' · ' + NOTE.duree(total) : '');
+  }
+
+  NOTE.quandLecture(function (cle, enCours, position, longueur) {
+    var b = $('note-play-' + S.ecran);
+    if (!b || b.getAttribute('data-cle') !== cle) return;
+    b.innerHTML = libelleLecture(cle, Number(b.getAttribute('data-duree')) || 0, enCours, position, longueur);
+  });
+
+  function blocNote(ou, c) {
+    if (!NOTE.possible()) return '';
+    var n = noteAffichee(ou, c);
+    var corps;
+    if (NOTE.enCours() && S.noteEcran === ou) {
+      corps = '<div class="note-rec"><span class="rec-point" aria-hidden="true"></span>' +
+        '<span id="note-temps-' + ou + '" class="note-temps" role="timer">' + NOTE.duree(NOTE.secondes()) + ' / ' + NOTE.duree(NOTE.DUREE_MAX) + '</span>' +
+        '<button class="btn pri mini" data-a="note-stop">Arrêter</button></div>';
+    } else if (n) {
+      corps = '<div class="note-lecteur"><button class="btn sec mini note-play" id="note-play-' + ou + '" data-a="note-jouer" data-v="' + ou + '" data-cle="' + esc(n.cle) + '" data-duree="' + (n.duree || 0) + '">' +
+          libelleLecture(n.cle, n.duree, NOTE.enLecture(n.cle), 0, 0) + '</button>' +
+        (S.confirmNote
+          ? '<span class="note">Supprimer la note ?</span><button class="lien doux" data-a="note-annuler-suppr">Annuler</button><button class="lien" data-a="note-suppr" data-v="' + ou + '">Supprimer</button>'
+          : '<button class="lien doux" data-a="note-demander-suppr" data-v="' + ou + '">Supprimer</button>') +
+        '</div>' +
+        (n.enAttente ? '<div class="grille2"><button class="btn sec" data-a="note-envoyer">Réessayer l\'envoi</button></div><p class="note">Pas encore envoyée dans le Drive : le réseau a manqué.</p>' : '');
+    } else {
+      corps = '<button class="btn sec" data-a="note-rec" data-v="' + ou + '">' + ICO.micro + 'Enregistrer une note vocale</button>';
+    }
+    return corps + '<p class="note">' + NOTE.duree(NOTE.DUREE_MAX) + ' au plus. Rangée dans le Drive, dossier « ' + esc(CONFIG.NOM_DOSSIER_NOTES) + ' ».</p>';
+  }
+
+  function redessinerNote(ou) {
+    if (ou === 'verif' && S.ecran === 'verif') { lireForm(); RENDUS.verif(); }
+    if (ou === 'fiche' && S.ecran === 'fiche') RENDUS.fiche();
+  }
+
+  function envoyerNoteFiche() {
+    var attente = S.noteFiche;
+    if (!attente) return;
+    appel(function () { return D.attacherNote(attente.id, { blob: attente.note.blob, mime: attente.note.mime }); }, 'Envoi de la note…', function (nc) {
+      var ancien = contact(attente.id);
+      if (ancien && ancien.noteId) NOTE.oublier(ancien.noteId);
+      NOTE.oublier(attente.note.cle);
+      URL.revokeObjectURL(attente.note.url);
+      S.noteFiche = null;
+      remplacer(nc);
+      redessinerNote('fiche');
+      toast('Note vocale rangée dans le Drive.');
+    }, { ko: function (message) { redessinerNote('fiche'); toast(message, true); } });
   }
 
   RENDUS.verif = function () {
@@ -874,6 +960,7 @@ import * as AT from './attente.js';
         '<section class="carte pile">' +
           '<h2 class="eyebrow">Contexte</h2>' +
           '<label class="champ">Où et pourquoi<textarea data-f="contexte" placeholder="Ex. : rencontrée au salon, cherche un traiteur pour ses séminaires">' + esc(f.contexte) + '</textarea></label>' +
+          (S.edition ? '' : '<div class="pile" style="gap:0.5rem"><span class="champ">Note vocale</span>' + blocNote('verif') + '</div>') +
           '<div class="pile" style="gap:0.5rem"><span class="champ">Priorité</span><div class="seg c3" role="group" aria-label="Priorité">' +
             ['Haute', 'Moyenne', 'Basse'].map(function (p) {
               return '<button class="' + (f.priorite === p ? 'actif' : '') + '" data-a="prio" data-v="' + p + '" aria-pressed="' + (f.priorite === p) + '">' + p + '</button>';
@@ -983,11 +1070,13 @@ import * as AT from './attente.js';
         '</section>' +
         (c.contexte ? '<section class="carte pile" style="gap:0.6rem"><h2 class="eyebrow">Contexte</h2><p class="texte">' + esc(c.contexte) + '</p>' +
           (c.ajoute ? '<span class="note">Ajouté le ' + esc(dateLongue(c.ajoute).toLowerCase()) + '</span>' : '') + '</section>' : '') +
+        (NOTE.possible() || c.noteId ? '<section class="carte pile" style="gap:0.6rem"><h2 class="eyebrow">Note vocale</h2>' +
+          (NOTE.possible() ? blocNote('fiche', c) : '<a class="lien" href="' + esc(c.note) + '" target="_blank" rel="noopener">Ouvrir la note dans le Drive' + ICO.externe + '</a>') + '</section>' : '') +
         (coord ? '<section class="carte pile" style="gap:0.6rem"><h2 class="eyebrow">Autres coordonnées</h2>' + coord + '</section>' : '') +
         (c.photo ? '<a class="carte lien large" href="' + esc(c.photo) + '" target="_blank" rel="noopener">Voir la photo de la carte' + ICO.externe + '</a>' : '') +
         (S.confirmSuppr
           ? '<div class="alerte" role="alert"><span class="ico">' + ICO.alerte + '</span>' +
-              '<div class="pile" style="gap:0.6rem;flex:1"><span><strong>Supprimer ' + esc(nomComplet(c)) + ' ?</strong> La ligne du Sheet, l\'événement Agenda et la photo seront supprimés.</span>' +
+              '<div class="pile" style="gap:0.6rem;flex:1"><span><strong>Supprimer ' + esc(nomComplet(c)) + ' ?</strong> La ligne du Sheet, l\'événement Agenda, la photo' + (c.noteId ? ' et la note vocale' : '') + ' seront supprimés.</span>' +
               '<div class="grille2"><button class="btn sec" data-a="annuler-suppr">Annuler</button><button class="btn danger-plein" data-a="valider-suppr">Supprimer</button></div></div></div>'
           : '<button class="btn danger" data-a="demander-suppr">Supprimer le contact</button>') +
       '</div>';
@@ -1336,6 +1425,7 @@ import * as AT from './attente.js';
         S.photoIds = [];
         S.images = { recto: null, verso: null };
         S.edition = false;
+        if (S.note) { NOTE.oublier(S.note.cle); URL.revokeObjectURL(S.note.url); S.note = null; }
         aller('fiche', 'replace');
         majRecap();
         toast(message);
@@ -1344,11 +1434,71 @@ import * as AT from './attente.js';
         appel(function () { return D.majContact(f, S.reglages); }, 'Enregistrement…', function (c) { finir(c, 'Modifications enregistrées.'); });
       } else {
         var ids = S.photoIds.slice();
-        appel(function () { return D.enregistrerContact(f, ids, S.reglages); }, 'Enregistrement…', function (c) {
+        if (NOTE.enCours()) { toast('Arrêter la note vocale avant d\'enregistrer.', true); return; }
+        var note = S.note ? { blob: S.note.blob, mime: S.note.mime } : null;
+        appel(function () { return D.enregistrerContact(f, ids, S.reglages, note); }, note ? 'Enregistrement du contact et de la note…' : 'Enregistrement…', function (c) {
           finir(c, 'Contact enregistré' + (c.eventId ? ', relance ajoutée à l\'agenda' : '') + (c.invites && c.eventId ? ', invitation envoyée à ' + c.invites : '') + '.');
         });
       }
     },
+
+    'note-rec': function (ou) {
+      if (NOTE.enCours()) return;
+      if (ou === 'verif') lireForm();
+      NOTE.stopperLecture();
+      var c = ou === 'fiche' ? contact(S.courantId) : null;
+      S.noteEcran = ou;
+      S.confirmNote = false;
+      NOTE.demarrer(function (sec) {
+        var t = $('note-temps-' + ou);
+        if (t) t.textContent = NOTE.duree(sec) + ' / ' + NOTE.duree(NOTE.DUREE_MAX);
+      }, function (r) {
+        if (!r) { redessinerNote(ou); toast('Note trop courte : rien n\'a été gardé.', true); return; }
+        r.url = URL.createObjectURL(r.blob);
+        r.cle = 'locale-' + Date.now();
+        if (ou === 'verif') {
+          if (S.ecran !== 'verif' || !S.form) { URL.revokeObjectURL(r.url); return; }
+          oublierNoteLocale();
+          S.note = r;
+          redessinerNote('verif');
+          return;
+        }
+        if (!c) return;
+        if (S.noteFiche) { NOTE.oublier(S.noteFiche.note.cle); URL.revokeObjectURL(S.noteFiche.note.url); }
+        S.noteFiche = { id: c.id, note: r };
+        envoyerNoteFiche();
+      }).then(function () { redessinerNote(ou); }, function (e) { toast(messageErreur(e), true); });
+    },
+    'note-stop': function () { NOTE.arreter(); },
+    'note-jouer': function (ou) {
+      var n = noteAffichee(ou, ou === 'fiche' ? contact(S.courantId) : null);
+      if (!n) return;
+      NOTE.basculer(n.cle, n.source).catch(function (e) {
+        NOTE.oublier(n.cle);
+        redessinerNote(ou);
+        toast(e && e.name === 'NotSupportedError'
+          ? 'Ce téléphone ne sait pas lire cette note (enregistrée sur un autre appareil). Elle reste disponible dans le Drive.'
+          : messageErreur(e), true);
+      });
+    },
+    'note-demander-suppr': function (ou) { if (ou === 'verif') lireForm(); S.confirmNote = true; redessinerNote(ou); },
+    'note-annuler-suppr': function () { S.confirmNote = false; redessinerNote(S.ecran); },
+    'note-suppr': function (ou) {
+      S.confirmNote = false;
+      if (ou === 'verif') { lireForm(); oublierNoteLocale(); RENDUS.verif(); return; }
+      var c = contact(S.courantId);
+      if (!c) return;
+      if (S.noteFiche && S.noteFiche.id === c.id) {
+        NOTE.oublier(S.noteFiche.note.cle); URL.revokeObjectURL(S.noteFiche.note.url); S.noteFiche = null;
+        RENDUS.fiche(); return;
+      }
+      appel(function () { return D.retirerNote(c.id); }, 'Suppression de la note…', function (nc) {
+        NOTE.oublier(c.noteId);
+        remplacer(nc); RENDUS.fiche();
+        toast('Note vocale supprimée (dans la corbeille du Drive pendant 30 jours).');
+      });
+    },
+    'note-envoyer': function () { envoyerNoteFiche(); },
 
     'modifier': function () {
       var c = contact(S.courantId);

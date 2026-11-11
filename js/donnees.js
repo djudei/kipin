@@ -18,15 +18,15 @@ export const COLONNES = [
   ['fixe', 'Fixe'], ['standard', 'Standard'], ['site', 'Site web'], ['linkedin', 'LinkedIn'], ['adresse', 'Adresse'], ['contexte', 'Contexte'],
   ['priorite', 'Priorité'], ['tag', 'Tag'], ['dateRelance', 'Date de relance'], ['agenda', 'Agenda'],
   ['recap', 'Récap du lundi'], ['statut', 'Statut'], ['eventId', 'ID événement'], ['photo', 'Photo'],
-  ['photoIds', 'ID photos'], ['invites', 'Rappel partagé avec']
+  ['photoIds', 'ID photos'], ['invites', 'Rappel partagé avec'], ['note', 'Note vocale'], ['noteId', 'ID note']
 ];
-const DERNIERE_COL = String.fromCharCode(64 + COLONNES.length); // 24 colonnes → « X »
+const DERNIERE_COL = String.fromCharCode(64 + COLONNES.length); // 26 colonnes → « Z »
 export const STATUTS = ['À relancer', 'Relancé', 'Sans suite'];
 export const PRIORITES = ['Haute', 'Moyenne', 'Basse'];
 const CHAMPS_CARTE = ['prenom', 'nom', 'societe', 'poste', 'email', 'telephone', 'fixe', 'standard', 'site', 'linkedin', 'adresse'];
 
 /* Espace de l'utilisateur, rempli par charger() */
-const E = { sheetId: '', gidContacts: null, dossierId: '', config: {}, email: '' };
+const E = { sheetId: '', gidContacts: null, dossierId: '', dossierNotesId: '', config: {}, email: '' };
 
 const fuseau = () => Intl.DateTimeFormat().resolvedOptions().timeZone || 'Europe/Paris';
 const enc = encodeURIComponent;
@@ -48,7 +48,7 @@ export async function charger() {
   }
   const meta = await api(SHEETS + '/' + E.sheetId + '?fields=sheets.properties');
   meta.sheets.forEach(s => { if (s.properties.title === 'Contacts') E.gidContacts = s.properties.sheetId; });
-  await ajouterColonnesTelephone();
+  await migrerEntete();
 
   const lots = await api(SHEETS + '/' + E.sheetId + '/values:batchGet?majorDimension=ROWS&ranges=' +
     enc('Contacts!A2:' + DERNIERE_COL) + '&ranges=' + enc('Réglages!A2:B') + '&ranges=' + enc('Config!A2:B'));
@@ -57,6 +57,7 @@ export async function charger() {
   E.config = {};
   configBrut.forEach(l => { if (l[0]) E.config[l[0]] = l[1] || ''; });
   E.dossierId = E.config.dossierPhotos || '';
+  E.dossierNotesId = E.config.dossierNotes || '';
   if (E.config.format !== '2' && E.gidContacts !== null) {
     try { await reparerFormat(); } catch (e) { /* esthétique seulement : on continue */ }
   }
@@ -74,18 +75,25 @@ export async function charger() {
 }
 
 /**
- * Sheets créés avant les trois numéros : on insère « Fixe » et « Standard » juste après
- * l'ancienne colonne « Téléphone » (renommée « Mobile »). Les numéros déjà saisis restent en place.
- * Vérifié sur l'en-tête : ne s'applique jamais deux fois.
+ * Met à jour l'en-tête des Sheets créés avec une ancienne version de Kipin. Vérifié sur l'en-tête : ne s'applique jamais deux fois.
+ * - Avant les trois numéros : « Fixe » et « Standard » insérés juste après l'ancienne colonne « Téléphone » (renommée « Mobile »).
+ * - Avant la note vocale : « Note vocale » et « ID note » ajoutées en fin de ligne (rien ne bouge).
  */
-async function ajouterColonnesTelephone() {
+async function migrerEntete() {
   if (E.gidContacts === null) return;
-  const r = await api(SHEETS + '/' + E.sheetId + '/values/' + enc('Contacts!A1:X1'));
+  const r = await api(SHEETS + '/' + E.sheetId + '/values/' + enc('Contacts!A1:' + DERNIERE_COL + '1'));
   const entete = (r.values && r.values[0]) || [];
-  if (entete[8] === 'Fixe' || entete[7] !== 'Téléphone') return;
-  await api(SHEETS + '/' + E.sheetId + ':batchUpdate', {
-    corps: { requests: [{ insertDimension: { range: { sheetId: E.gidContacts, dimension: 'COLUMNS', startIndex: 8, endIndex: 10 }, inheritFromBefore: true } }] }
-  });
+  if (!entete.length) return;
+  let reecrire = false;
+  if (entete[7] === 'Téléphone' && entete[8] !== 'Fixe') {
+    await api(SHEETS + '/' + E.sheetId + ':batchUpdate', {
+      corps: { requests: [{ insertDimension: { range: { sheetId: E.gidContacts, dimension: 'COLUMNS', startIndex: 8, endIndex: 10 }, inheritFromBefore: true } }] }
+    });
+    reecrire = true;
+  } else if (entete[24] !== 'Note vocale') {
+    reecrire = true;
+  }
+  if (!reecrire) return;
   await api(SHEETS + '/' + E.sheetId + '/values/' + enc('Contacts!A1') + '?valueInputOption=RAW', {
     methode: 'PUT', corps: { values: [COLONNES.map(c => c[1])] }
   });
@@ -217,7 +225,7 @@ function nettoyerEmails(texte) {
 
 function normaliser(c, reglages) {
   const p = {};
-  CHAMPS_CARTE.concat(['contexte', 'tag', 'id', 'ajoute', 'statut', 'eventId', 'photo', 'photoIds']).forEach(k => {
+  CHAMPS_CARTE.concat(['contexte', 'tag', 'id', 'ajoute', 'statut', 'eventId', 'photo', 'photoIds', 'note', 'noteId']).forEach(k => {
     p[k] = String(c[k] || '').trim();
   });
   p.invites = nettoyerEmails(c.invites);
@@ -255,7 +263,8 @@ async function ecrireLigne(ligne, c) {
   });
 }
 
-export async function enregistrerContact(c, photoIds, reglages) {
+/** note (facultative) = { blob, mime } : envoyée dans « Kipin – Notes » avec le contact. */
+export async function enregistrerContact(c, photoIds, reglages, note) {
   c = normaliser(c, reglages);
   c.id = (crypto.randomUUID ? crypto.randomUUID() : String(Date.now()) + Math.random().toString(16).slice(2));
   c.ajoute = isoAuj();
@@ -263,10 +272,20 @@ export async function enregistrerContact(c, photoIds, reglages) {
   c.eventId = '';
   c.photoIds = (photoIds || []).join(',');
   c.photo = photoIds && photoIds.length ? await renommerPhotos(photoIds, c) : '';
-  await syncEvenement(c, reglages);
-  await api(SHEETS + '/' + E.sheetId + '/values/' + enc('Contacts!A1') + ':append?valueInputOption=RAW&insertDataOption=OVERWRITE', {
-    corps: { values: [contactVersLigne(c)] }
-  });
+  c.note = ''; c.noteId = '';
+  if (note) {
+    const f = await sauverNote(note, c);
+    c.noteId = f.id; c.note = f.lien;
+  }
+  try {
+    await syncEvenement(c, reglages);
+    await api(SHEETS + '/' + E.sheetId + '/values/' + enc('Contacts!A1') + ':append?valueInputOption=RAW&insertDataOption=OVERWRITE', {
+      corps: { values: [contactVersLigne(c)] }
+    });
+  } catch (e) {
+    if (c.noteId) jeterFichier(c.noteId); // nouvel essai = nouvel envoi : pas de doublon dans le Drive
+    throw e;
+  }
   return c;
 }
 
@@ -274,7 +293,7 @@ export async function majContact(c, reglages) {
   const ligne = await trouverLigne(c.id);
   const ancien = await lireLigne(ligne);
   const nouveau = normaliser(c, reglages);
-  ['id', 'ajoute', 'statut', 'eventId', 'photo', 'photoIds'].forEach(k => { nouveau[k] = ancien[k]; });
+  ['id', 'ajoute', 'statut', 'eventId', 'photo', 'photoIds', 'note', 'noteId'].forEach(k => { nouveau[k] = ancien[k]; });
   if (!nouveau.dateRelance && nouveau.statut === 'À relancer') nouveau.statut = 'Sans suite';
   if (nouveau.dateRelance && !ancien.dateRelance && nouveau.statut === 'Sans suite') nouveau.statut = 'À relancer';
   await syncEvenement(nouveau, reglages, ancien.invites);
@@ -307,7 +326,7 @@ export async function supprimerContact(id) {
   const ligne = await trouverLigne(id);
   const c = await lireLigne(ligne);
   if (c.eventId) await supprimerEvenement(c.eventId, !!c.invites);
-  for (const pid of String(c.photoIds || '').split(',').filter(Boolean)) {
+  for (const pid of String(c.photoIds || '').split(',').filter(Boolean).concat(c.noteId ? [c.noteId] : [])) {
     try { await api(DRIVE + '/' + pid, { methode: 'PATCH', corps: { trashed: true } }); } catch (e) { /* déjà supprimée */ }
   }
   await api(SHEETS + '/' + E.sheetId + ':batchUpdate', {
@@ -396,40 +415,89 @@ export async function supprimerDuCarnet(email) {
   return o.carnet;
 }
 
-/* ================= Photos (Drive) ================= */
+/* ================= Photos et notes vocales (Drive) ================= */
 
-async function dossierPhotos() {
-  if (E.dossierId) {
+/** Dossier Kipin du Drive (créé au premier besoin, recréé s'il a été supprimé). */
+async function dossier(champ, cleConfig, nom, marque) {
+  if (E[champ]) {
     try {
-      const f = await api(DRIVE + '/' + E.dossierId + '?fields=id,trashed');
-      if (!f.trashed) return E.dossierId;
+      const f = await api(DRIVE + '/' + E[champ] + '?fields=id,trashed');
+      if (!f.trashed) return E[champ];
     } catch (e) { /* dossier supprimé : on le recrée */ }
   }
   const d = await api(DRIVE + '?fields=id', {
-    corps: { name: CONFIG.NOM_DOSSIER, mimeType: 'application/vnd.google-apps.folder', appProperties: { kipin: 'photos' } }
+    corps: { name: nom, mimeType: 'application/vnd.google-apps.folder', appProperties: { kipin: marque } }
   });
-  E.dossierId = d.id;
-  await ecrireConfig('dossierPhotos', d.id);
+  E[champ] = d.id;
+  await ecrireConfig(cleConfig, d.id);
   return d.id;
+}
+const dossierPhotos = () => dossier('dossierId', 'dossierPhotos', CONFIG.NOM_DOSSIER, 'photos');
+const dossierNotes = () => dossier('dossierNotesId', 'dossierNotes', CONFIG.NOM_DOSSIER_NOTES, 'notes');
+
+function envoiMultipart(meta, blob, mime) {
+  const limite = 'kipin' + Math.random().toString(16).slice(2);
+  const corps = new Blob([
+    '--' + limite + '\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n' + JSON.stringify(meta) + '\r\n',
+    '--' + limite + '\r\nContent-Type: ' + mime + '\r\n\r\n',
+    blob,
+    '\r\n--' + limite + '--'
+  ]);
+  return api(UPLOAD + '?uploadType=multipart&fields=id,webViewLink', { corps, type: 'multipart/related; boundary=' + limite });
+}
+
+const EXT_NOTE = mime => (/mp4|aac/.test(mime) ? 'm4a' : /ogg/.test(mime) ? 'ogg' : 'webm');
+
+/** note = { blob, mime } → { id, lien } dans « Kipin – Notes », nommée d'après le contact. */
+async function sauverNote(note, c) {
+  const parent = await dossierNotes();
+  const jour = isoAuj();
+  const f = await envoiMultipart({ name: nomComplet(c) + ' – note vocale ' + jour + '.' + EXT_NOTE(note.mime), parents: [parent] }, note.blob, note.mime);
+  return { id: f.id, lien: f.webViewLink || '' };
+}
+
+function jeterFichier(id) {
+  return api(DRIVE + '/' + id, { methode: 'PATCH', corps: { trashed: true } }).catch(() => {});
+}
+
+/** Ajoute (ou remplace) la note vocale d'un contact déjà enregistré. */
+export async function attacherNote(id, note) {
+  const ligne = await trouverLigne(id);
+  const c = await lireLigne(ligne);
+  const f = await sauverNote(note, c);
+  const ancienne = c.noteId;
+  c.noteId = f.id; c.note = f.lien;
+  await ecrireLigne(ligne, c);
+  if (ancienne) await jeterFichier(ancienne);
+  return c;
+}
+
+export async function retirerNote(id) {
+  const ligne = await trouverLigne(id);
+  const c = await lireLigne(ligne);
+  if (c.noteId) await jeterFichier(c.noteId);
+  c.noteId = ''; c.note = '';
+  await ecrireLigne(ligne, c);
+  return c;
+}
+
+/** Télécharge la note pour l'écouter dans Kipin → URL locale (blob:). */
+export async function lireNote(noteId) {
+  const rep = await api(DRIVE + '/' + noteId + '?alt=media', { brut: true });
+  if (!rep.ok) throw new Error(rep.status === 404 ? 'Note introuvable dans le Drive (supprimée à la main ?).' : 'Impossible de lire la note (' + rep.status + ').');
+  return URL.createObjectURL(await rep.blob());
 }
 
 /** images = [{data: base64, mimeType}] → identifiants Drive. */
 export async function sauverPhotos(images) {
-  const dossier = await dossierPhotos();
+  const parent = await dossierPhotos();
   const horodatage = new Date().toISOString().slice(0, 19).replace(/[:T]/g, '-');
   const ids = [];
   for (let i = 0; i < images.length; i++) {
     const img = images[i];
     const octets = Uint8Array.from(atob(img.data), ch => ch.charCodeAt(0));
-    const limite = 'kipin' + Math.random().toString(16).slice(2);
-    const meta = { name: 'carte_' + horodatage + (i === 0 ? '_recto' : '_verso') + '.jpg', parents: [dossier] };
-    const corps = new Blob([
-      '--' + limite + '\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n' + JSON.stringify(meta) + '\r\n',
-      '--' + limite + '\r\nContent-Type: ' + (img.mimeType || 'image/jpeg') + '\r\n\r\n',
-      octets,
-      '\r\n--' + limite + '--'
-    ]);
-    const f = await api(UPLOAD + '?uploadType=multipart&fields=id', { corps, type: 'multipart/related; boundary=' + limite });
+    const meta = { name: 'carte_' + horodatage + (i === 0 ? '_recto' : '_verso') + '.jpg', parents: [parent] };
+    const f = await envoiMultipart(meta, octets, img.mimeType || 'image/jpeg');
     ids.push(f.id);
   }
   return ids;
