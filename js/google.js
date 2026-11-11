@@ -13,7 +13,7 @@ export const SCOPES = [
   'openid',
   'email',
   'https://www.googleapis.com/auth/drive.file',      // uniquement les fichiers créés par Kipin
-  'https://www.googleapis.com/auth/calendar.events'  // événements de relance (et invitations envoyées par Google Agenda)
+  'https://www.googleapis.com/auth/calendar.events.owned' // événements de relance, seulement dans les agendas de la personne (et invitations envoyées par Google Agenda)
 ];
 
 const CLE_JETON = 'kipin.jeton';
