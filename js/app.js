@@ -300,6 +300,7 @@ import * as AT from './attente.js';
 
   /* ================= Écran : connexion ================= */
   RENDUS.connexion = function () {
+    if (S.avantGoogle) { renduAvantGoogle(); return; }
     var point = function (ico, texte) { return '<li>' + ico + '<span>' + texte + '</span></li>'; };
     $('e-connexion').innerHTML =
       '<div class="connexion">' +
@@ -317,11 +318,39 @@ import * as AT from './attente.js';
           (G.emailMemorise()
             ? '<button class="btn google" data-a="connexion">Continuer avec ' + esc(G.emailMemorise()) + '</button>' +
               '<button class="lien" style="align-self:center" data-a="connexion" data-v="autre">Utiliser un autre compte</button>'
-            : '<button class="btn google" data-a="connexion">Se connecter avec Google</button>') +
+            : '<button class="btn google" data-a="avant-google">Se connecter avec Google</button>') +
           '<p class="note" style="text-align:center">Avec ton adresse Gmail. Kipin ne voit que les fichiers qu\'il crée dans ton Drive.</p>' +
         '</div>' +
       '</div>';
   };
+
+  /* ================= Écran : avant Google (première connexion) ================= */
+  // Kipin n'est pas encore validé par Google : Google affiche un avertissement avant l'autorisation.
+  // On montre ce qui va s'afficher et où toucher, pour que personne ne croie à une arnaque.
+  function renduAvantGoogle() {
+    var etape = function (n, titre, contenu) {
+      return '<li class="etape"><span class="etape-n" aria-hidden="true">' + n + '</span><div><b>' + titre + '</b>' + contenu + '</div></li>';
+    };
+    $('e-connexion').innerHTML =
+      '<header class="barre"><button class="icone" data-a="retour-connexion" aria-label="Retour">' + ICO.retour + '</button><h1 class="t2">Avant de continuer</h1></header>' +
+      '<div class="contenu pile">' +
+        '<p class="texte">Kipin est un <strong>projet gratuit, pas encore validé par Google</strong>. Google va donc afficher un <strong>avertissement</strong> : c\'est normal, et ça n\'arrive qu\'à la première connexion.</p>' +
+        '<ol class="etapes-cle">' +
+          etape(1, 'Choisis ton compte Gmail', '<span>Celui où Kipin rangera tes contacts.</span>') +
+          etape(2, 'Touche « Paramètres avancés »', '<span>En bas de l\'écran « Google n\'a pas validé cette application ». Ne touche pas le bouton « Retour à la sécurité ».</span>' +
+            '<div class="maquette" aria-hidden="true">' +
+              '<span class="maquette-titre">Google n\'a pas validé cette application</span>' +
+              '<span class="maquette-texte">L\'application demande l\'accès à des informations sensibles de votre compte Google…</span>' +
+              '<span class="maquette-ligne"><span class="maquette-lien vise">Paramètres avancés</span><span class="maquette-btn">Retour à la sécurité</span></span>' +
+            '</div>') +
+          etape(3, 'Touche « Accéder à djudei.github.io (non sécurisé) »', '<span>Le lien apparaît juste en dessous. « djudei.github.io » est l\'adresse de Kipin.</span>' +
+            '<div class="maquette" aria-hidden="true"><span class="maquette-lien vise">Accéder à djudei.github.io (non sécurisé)</span></div>') +
+          etape(4, 'Coche toutes les cases, puis « Continuer »', '<span>Google Drive (seulement les fichiers créés par Kipin) et Google Agenda (tes relances). Sans ces cases, Kipin ne pourra pas ranger tes contacts ni créer tes rappels.</span>') +
+        '</ol>' +
+        '<div class="astuce"><span class="ico-bleu">' + ICO.info + '</span><span><strong>Ce que Kipin ne fait pas :</strong> il ne lit pas tes emails, ne voit pas tes autres fichiers et n\'envoie rien à personne. Tout reste dans ton compte Google.</span></div>' +
+      '</div>' +
+      '<div class="pied"><button class="btn pri" data-a="connexion">J\'ai compris, continuer vers Google</button></div>';
+  }
 
   /* ================= Écran : clé Gemini ================= */
   // Premier lancement, ou depuis Réglages / l'écran photo quand aucune clé n'est encore enregistrée.
@@ -1054,8 +1083,11 @@ import * as AT from './attente.js';
 
   /* ================= Actions ================= */
   var ACTIONS = {
+    'avant-google': function () { S.avantGoogle = true; S.erreurConnexion = ''; RENDUS.connexion(); window.scrollTo(0, 0); },
+    'retour-connexion': function () { S.avantGoogle = false; RENDUS.connexion(); },
     'connexion': function (v) {
       S.erreurConnexion = '';
+      S.avantGoogle = false;
       // La fenêtre Google s'ouvre dans le prolongement direct de l'appui (sinon le téléphone la bloque).
       G.connecter(v === 'autre').then(function (manquants) { chargerKipin(manquants); }, function (e) {
         S.erreurConnexion = messageErreur(e);
