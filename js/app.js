@@ -891,7 +891,7 @@ import * as NOTE from './note.js';
     } else {
       corps = '<button class="btn sec" data-a="note-rec" data-v="' + ou + '">' + ICO.micro + 'Enregistrer une note vocale</button>';
     }
-    return corps + '<p class="note">' + NOTE.duree(NOTE.DUREE_MAX) + ' au plus. Rangée dans le Drive : « ' + esc(CONFIG.NOM_RACINE) + ' » › « ' + esc(CONFIG.NOM_DOSSIER_NOTES) + ' ».</p>';
+    return corps + '<p class="note">' + NOTE.duree(NOTE.DUREE_MAX) + ' au plus. Rangée dans le Drive, dossier «\u00a0' + esc(CONFIG.NOM_RACINE) + '\u00a0› ' + esc(CONFIG.NOM_DOSSIER_NOTES) + '\u00a0».</p>';
   }
 
   function redessinerNote(ou) {
