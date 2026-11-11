@@ -23,10 +23,10 @@ Web app iPhone : on photographie une carte de visite, Gemini remplit la fiche, K
 
 ### 2. Google Cloud (ID client OAuth)
 1. [console.cloud.google.com](https://console.cloud.google.com) : créer un projet « Kipin ».
-2. *API et services > Bibliothèque* : activer **Google Drive API**, **Google Sheets API**, **Google Calendar API**, **Gmail API**.
+2. *API et services > Bibliothèque* : activer **Google Drive API**, **Google Sheets API** et **Google Calendar API**.
 3. *Google Auth Platform > Branding* : nom « Kipin », email d'assistance, domaine autorisé `djudei.github.io`.
 4. *Audience* : type **Externe**, puis **Publier l'application** (statut « En production ») pour que tout compte Gmail puisse se connecter. Sans validation par Google, un écran « Application non validée » s'affiche et le nombre d'utilisateurs est limité à 100.
-5. *Accès aux données* : ajouter les champs d'application `openid`, `email`, `drive.file`, `calendar.events`, `gmail.send`.
+5. *Accès aux données* : ajouter les champs d'application `openid`, `email`, `drive.file`, `calendar.events`.
 6. *Clients > Créer un client* : type **Application Web**.
    - Origines JavaScript autorisées : `https://djudei.github.io`
    - URI de redirection autorisés : `https://djudei.github.io/Kipin/`

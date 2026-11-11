@@ -2,7 +2,7 @@
  * KIPIN — donnees.js
  * Tout ce qui touche au compte Google de l'utilisateur :
  * son Sheet « Kipin – Contacts », ses photos, ses événements Agenda,
- * le partage d'un rappel par email et le rendez-vous « relances de la semaine ».
+ * les invités des relances et le rendez-vous « relances de la semaine ».
  */
 import { CONFIG } from './config.js';
 import { api, memoriserEmail } from './google.js';
@@ -11,7 +11,6 @@ const SHEETS = 'https://sheets.googleapis.com/v4/spreadsheets';
 const DRIVE = 'https://www.googleapis.com/drive/v3/files';
 const UPLOAD = 'https://www.googleapis.com/upload/drive/v3/files';
 const AGENDA = 'https://www.googleapis.com/calendar/v3/calendars/primary/events';
-const GMAIL = 'https://gmail.googleapis.com/gmail/v1/users/me/messages/send';
 
 export const COLONNES = [
   ['id', 'ID'], ['ajoute', 'Ajouté le'], ['prenom', 'Prénom'], ['nom', 'Nom'],
@@ -210,7 +209,7 @@ function contactVersLigne(c) {
 function nettoyerEmails(texte) {
   const liste = String(texte || '').split(/[\s,;]+/).map(e => e.trim().toLowerCase()).filter(Boolean);
   liste.forEach(e => {
-    if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(e)) throw new Error('Adresse email invalide pour le partage : ' + e);
+    if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(e)) throw new Error('Adresse email invalide pour l\'invitation : ' + e);
   });
   if (liste.length > 5) throw new Error('Partage limité à 5 adresses.');
   return liste.filter((e, i) => liste.indexOf(e) === i).join(', ');
@@ -268,7 +267,6 @@ export async function enregistrerContact(c, photoIds, reglages) {
   await api(SHEETS + '/' + E.sheetId + '/values/' + enc('Contacts!A1') + ':append?valueInputOption=RAW&insertDataOption=OVERWRITE', {
     corps: { values: [contactVersLigne(c)] }
   });
-  await partagerSiBesoin(c, reglages);
   return c;
 }
 
@@ -279,11 +277,8 @@ export async function majContact(c, reglages) {
   ['id', 'ajoute', 'statut', 'eventId', 'photo', 'photoIds'].forEach(k => { nouveau[k] = ancien[k]; });
   if (!nouveau.dateRelance && nouveau.statut === 'À relancer') nouveau.statut = 'Sans suite';
   if (nouveau.dateRelance && !ancien.dateRelance && nouveau.statut === 'Sans suite') nouveau.statut = 'À relancer';
-  await syncEvenement(nouveau, reglages);
+  await syncEvenement(nouveau, reglages, ancien.invites);
   await ecrireLigne(ligne, nouveau);
-  if (nouveau.invites && (nouveau.invites !== ancien.invites || nouveau.dateRelance !== ancien.dateRelance)) {
-    await partagerSiBesoin(nouveau, reglages);
-  }
   return nouveau;
 }
 
@@ -305,14 +300,13 @@ export async function reporterRelance(id, dateIso, reglages) {
   c.statut = 'À relancer';
   await syncEvenement(c, reglages);
   await ecrireLigne(ligne, c);
-  await partagerSiBesoin(c, reglages);
   return c;
 }
 
 export async function supprimerContact(id) {
   const ligne = await trouverLigne(id);
   const c = await lireLigne(ligne);
-  if (c.eventId) await supprimerEvenement(c.eventId);
+  if (c.eventId) await supprimerEvenement(c.eventId, !!c.invites);
   for (const pid of String(c.photoIds || '').split(',').filter(Boolean)) {
     try { await api(DRIVE + '/' + pid, { methode: 'PATCH', corps: { trashed: true } }); } catch (e) { /* déjà supprimée */ }
   }
@@ -487,15 +481,23 @@ function horaire(iso, heure, duree, minute) {
   return { start: { dateTime: debut, timeZone: fuseau() }, end: { dateTime: fin, timeZone: fuseau() } };
 }
 
-async function supprimerEvenement(id) {
-  try { await api(AGENDA + '/' + enc(id), { methode: 'DELETE' }); } catch (e) { if (e.status !== 404 && e.status !== 410) throw e; }
+/** prevenir : les invités reçoivent l'annulation de Google Agenda. */
+async function supprimerEvenement(id, prevenir) {
+  try { await api(AGENDA + '/' + enc(id) + '?sendUpdates=' + (prevenir ? 'all' : 'none'), { methode: 'DELETE' }); } catch (e) { if (e.status !== 404 && e.status !== 410) throw e; }
 }
 
-/** Crée, déplace ou supprime l'événement de relance pour qu'il corresponde au contact. */
-async function syncEvenement(c, r) {
-  const voulu = c.agenda && c.statut === 'À relancer' && c.dateRelance;
+/**
+ * Crée, déplace ou supprime l'événement de relance pour qu'il corresponde au contact.
+ * Les adresses « invités » sont ajoutées à l'événement : Google Agenda leur envoie l'invitation
+ * (puis les mises à jour et l'annulation). Un contact avec invités a donc toujours son événement.
+ * anciensInvites : invités avant modification, pour prévenir ceux qui sont retirés.
+ */
+async function syncEvenement(c, r, anciensInvites) {
+  const invites = String(c.invites || '').split(/[\s,;]+/).filter(Boolean);
+  const prevenir = invites.length > 0 || !!anciensInvites;
+  const voulu = (c.agenda || invites.length) && c.statut === 'À relancer' && c.dateRelance;
   if (!voulu) {
-    if (c.eventId) await supprimerEvenement(c.eventId);
+    if (c.eventId) await supprimerEvenement(c.eventId, prevenir);
     c.eventId = '';
     return c;
   }
@@ -503,17 +505,20 @@ async function syncEvenement(c, r) {
   const corps = Object.assign({
     summary: 'Relancer ' + qui + (c.societe && qui !== c.societe ? ' (' + c.societe + ')' : ''),
     description: descriptionEvenement(c),
+    attendees: invites.map(e => ({ email: e })),
+    guestsCanModify: false,
     reminders: { useDefault: false, overrides: [{ method: 'popup', minutes: 0 }] }
   }, horaire(c.dateRelance, r.heure, r.duree));
+  const envoi = '?sendUpdates=' + (prevenir ? 'all' : 'none');
   if (c.eventId) {
     try {
-      await api(AGENDA + '/' + enc(c.eventId), { methode: 'PATCH', corps: Object.assign({ status: 'confirmed' }, corps) });
+      await api(AGENDA + '/' + enc(c.eventId) + envoi, { methode: 'PATCH', corps: Object.assign({ status: 'confirmed' }, corps) });
       return c;
     } catch (e) {
       if (e.status !== 404 && e.status !== 410) throw e;
     }
   }
-  const ev = await api(AGENDA, { corps });
+  const ev = await api(AGENDA + envoi, { corps });
   c.eventId = ev.id;
   return c;
 }
@@ -613,108 +618,6 @@ function lundiRecap() {
   const maintenant = new Date();
   if (maintenant.getDay() === 1 && maintenant.getHours() * 60 + maintenant.getMinutes() < 8 * 60 + 45) return isoDe(maintenant);
   return isoPlusJours(lundiDe(isoDe(maintenant)), 7);
-}
-
-/* ================= Partage du rappel par email (Gmail + .ics) ================= */
-
-function b64(texte) {
-  const octets = new TextEncoder().encode(texte);
-  let bin = '';
-  octets.forEach(o => { bin += String.fromCharCode(o); });
-  return btoa(bin);
-}
-function b64Lignes(texte) { return b64(texte).replace(/.{76}/g, '$&\r\n'); }
-function b64url(texte) { return b64(texte).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, ''); }
-function echapper(s) {
-  return String(s || '').replace(/[&<>"']/g, ch => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[ch]));
-}
-
-/** Envoie le rappel aux adresses de c.invites. N'empêche jamais l'enregistrement. */
-async function partagerSiBesoin(c, r) {
-  if (!c.invites || !c.dateRelance) return c;
-  try {
-    const qui = [c.prenom, c.nom].join(' ').trim();
-    const cible = (qui || c.societe || c.email || 'ce contact') + (qui && c.societe ? ' - ' + c.societe : '');
-    const quand = dateFr(c.dateRelance) + ' à ' + r.heure + ' h';
-    const texte = 'Bonjour,\n\nRappel de reprendre contact avec ' + cible + '.\n\nTrès bonne journée,';
-    const html = '<div style="font-family:Helvetica,Arial,sans-serif;font-size:15px;line-height:1.5;color:#0E1726">' +
-      '<p>Bonjour,</p><p>Rappel de reprendre contact avec <strong>' + echapper(cible) + '</strong>.</p><p>Très bonne journée,</p>' +
-      '<p style="font-size:12px;color:#556070">Rendez-vous du ' + echapper(quand) + ' en pièce jointe : ouvre-la pour l\'ajouter à ton agenda.</p></div>';
-    const ics = construireIcs(c, r, 'Reprendre contact avec ' + cible, 'Rappel de reprendre contact avec ' + cible + '.');
-    const sujet = 'Rappel : reprendre contact avec ' + cible + ' (' + quand + ')';
-
-    const m = 'kipinM' + Date.now(), a = 'kipinA' + Date.now();
-    const mime = [
-      'To: ' + c.invites,
-      'Subject: =?UTF-8?B?' + b64(sujet) + '?=',
-      'MIME-Version: 1.0',
-      'Content-Type: multipart/mixed; boundary="' + m + '"',
-      '',
-      '--' + m,
-      'Content-Type: multipart/alternative; boundary="' + a + '"',
-      '',
-      '--' + a,
-      'Content-Type: text/plain; charset=UTF-8',
-      'Content-Transfer-Encoding: base64',
-      '',
-      b64Lignes(texte),
-      '--' + a,
-      'Content-Type: text/html; charset=UTF-8',
-      'Content-Transfer-Encoding: base64',
-      '',
-      b64Lignes(html),
-      '--' + a + '--',
-      '--' + m,
-      'Content-Type: text/calendar; charset=UTF-8; method=REQUEST; name="rappel.ics"',
-      'Content-Disposition: attachment; filename="rappel.ics"',
-      'Content-Transfer-Encoding: base64',
-      '',
-      b64Lignes(ics),
-      '--' + m + '--'
-    ].join('\r\n');
-    await api(GMAIL, { corps: { raw: b64url(mime) } });
-  } catch (e) {
-    if (e.name === 'ErreurSession') throw e;
-    c.partageErreur = e.message;
-  }
-  return c;
-}
-
-function construireIcs(c, r, titre, description) {
-  const pad = n => String(n).padStart(2, '0');
-  const utc = d => d.getUTCFullYear() + pad(d.getUTCMonth() + 1) + pad(d.getUTCDate()) + 'T' + pad(d.getUTCHours()) + pad(d.getUTCMinutes()) + '00Z';
-  const ech = s => String(s || '').replace(/\\/g, '\\\\').replace(/;/g, '\\;').replace(/,/g, '\\,').replace(/\r?\n/g, '\\n');
-  const p = c.dateRelance.split('-').map(Number);
-  const debut = new Date(p[0], p[1] - 1, p[2], r.heure, 0, 0);
-  const fin = new Date(debut.getTime() + r.duree * 60000);
-  const lignes = [
-    'BEGIN:VCALENDAR', 'VERSION:2.0', 'PRODID:-//Kipin//Relances//FR', 'CALSCALE:GREGORIAN', 'METHOD:REQUEST',
-    'BEGIN:VEVENT',
-    'UID:' + c.id + '@kipin',
-    'SEQUENCE:' + Math.floor(Date.now() / 60000),
-    'DTSTAMP:' + utc(new Date()),
-    'DTSTART:' + utc(debut),
-    'DTEND:' + utc(fin),
-    'SUMMARY:' + ech(titre),
-    'DESCRIPTION:' + ech(description + (c.contexte ? '\n\nContexte : ' + c.contexte : '')),
-    'ORGANIZER;CN=Kipin:mailto:' + E.email
-  ];
-  c.invites.split(/,\s*/).forEach(e => lignes.push('ATTENDEE;ROLE=REQ-PARTICIPANT;PARTSTAT=NEEDS-ACTION;RSVP=FALSE:mailto:' + e));
-  lignes.push('STATUS:CONFIRMED', 'BEGIN:VALARM', 'ACTION:DISPLAY', 'DESCRIPTION:' + ech(titre), 'TRIGGER:PT0M', 'END:VALARM', 'END:VEVENT', 'END:VCALENDAR');
-  return lignes.map(plier).join('\r\n');
-}
-
-/** Le format iCalendar impose des lignes de 75 octets au plus. */
-function plier(ligne) {
-  const morceaux = [];
-  let courant = '', taille = 0;
-  for (const ch of ligne) {
-    const octets = new TextEncoder().encode(ch).length;
-    if (taille + octets > (morceaux.length ? 74 : 75)) { morceaux.push(courant); courant = ''; taille = 0; }
-    courant += ch; taille += octets;
-  }
-  morceaux.push(courant);
-  return morceaux.join('\r\n ');
 }
 
 /* ================= Dates ================= */

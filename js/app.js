@@ -834,10 +834,10 @@ import * as AT from './attente.js';
           '<label class="case"><input type="checkbox" data-f="agenda"' + (f.agenda ? ' checked' : '') + '><span>Événement Google Agenda<small>Notification sur le téléphone le jour J</small></span></label>' +
           '<label class="case"><input type="checkbox" data-f="recap"' + (f.recap ? ' checked' : '') + '><span>Récap du lundi<small>Dans le rendez-vous « relances de la semaine » de ton Agenda</small></span></label>' +
           '<div class="pile" style="gap:0.5rem;border-top:1px solid var(--trait);padding-top:0.85rem">' +
-            '<label class="champ">Partager le rappel par email (facultatif)' +
+            '<label class="champ">Inviter à la relance (facultatif)' +
               '<input data-f="invites" type="text" inputmode="email" autocapitalize="off" autocorrect="off" placeholder="adresse@exemple.fr" value="' + esc(f.invites || '') + '"></label>' +
             carnet +
-            '<p class="note">Envoie un email avec le rendez-vous en pièce jointe, à ajouter à n\'importe quel agenda. Plusieurs adresses : sépare-les par une virgule.</p>' +
+            '<p class="note">La personne est ajoutée comme invitée à l\'événement : Google Agenda lui envoie l\'invitation, puis les changements de date. Plusieurs adresses : sépare-les par une virgule.</p>' +
           '</div>') +
         '</section>' +
       '</div>' +
@@ -912,7 +912,7 @@ import * as AT from './attente.js';
             (c.eventId ? '<span class="agenda-ok">' + ICO.ok + 'Dans l\'agenda</span>' : '') + '</div>' +
           '<span class="grosse-date">' + (c.dateRelance ? esc(dateLongue(c.dateRelance)) + ' · ' + esc(heureTxt()) : 'Aucune relance prévue') +
             (enRetard(c) ? ' <span class="badge retard">En retard</span>' : '') + '</span>' +
-          (c.invites ? '<span class="note">Rappel partagé avec ' + esc(c.invites) + '</span>' : '') +
+          (c.invites ? '<span class="note">Invités : ' + esc(c.invites) + '</span>' : '') +
           '<div class="seg c3" role="group" aria-label="Statut">' +
             ['À relancer', 'Relancé', 'Sans suite'].map(function (s) {
               return '<button class="' + (statutDe(c) === s ? 'actif' : '') + '" data-a="statut" data-v="' + s + '" aria-pressed="' + (statutDe(c) === s) + '">' + s + '</button>';
@@ -978,7 +978,7 @@ import * as AT from './attente.js';
         '</section>' +
         '<section class="carte pile" style="gap:0.4rem">' +
           '<h2 class="eyebrow">Emails d\'invitation</h2>' +
-          '<p class="note">Proposés en un geste quand tu partages un rappel. Les adresses saisies dans une fiche s\'ajoutent ici toutes seules.</p>' +
+          '<p class="note">Proposés en un geste quand tu invites quelqu\'un à une relance. Les adresses saisies dans une fiche s\'ajoutent ici toutes seules.</p>' +
           (carnet || '<p class="note">Aucune adresse pour l\'instant.</p>') +
           '<div class="ligne-ajout" style="padding-top:0.4rem"><input id="in-carnet" inputmode="email" autocapitalize="off" autocorrect="off" placeholder="adresse@exemple.fr" enterkeyhint="done" aria-label="Nouvelle adresse"><button class="btn pri mini" data-a="ajout-carnet">Ajouter</button></div>' +
         '</section>' +
@@ -1266,15 +1266,14 @@ import * as AT from './attente.js';
         S.edition = false;
         aller('fiche', 'replace');
         majRecap();
-        if (c.partageErreur) toast('Enregistré, mais le rappel n\'a pas pu être envoyé : ' + c.partageErreur, true);
-        else toast(message);
+        toast(message);
       };
       if (S.edition) {
         appel(function () { return D.majContact(f, S.reglages); }, 'Enregistrement…', function (c) { finir(c, 'Modifications enregistrées.'); });
       } else {
         var ids = S.photoIds.slice();
         appel(function () { return D.enregistrerContact(f, ids, S.reglages); }, 'Enregistrement…', function (c) {
-          finir(c, 'Contact enregistré' + (c.eventId ? ', relance ajoutée à l\'agenda' : '') + (c.invites ? ', rappel envoyé à ' + c.invites : '') + '.');
+          finir(c, 'Contact enregistré' + (c.eventId ? ', relance ajoutée à l\'agenda' : '') + (c.invites && c.eventId ? ', invitation envoyée à ' + c.invites : '') + '.');
         });
       }
     },
@@ -1312,7 +1311,7 @@ import * as AT from './attente.js';
       var id = S.courantId;
       appel(function () { return D.reporterRelance(id, d, S.reglages); }, 'Report de la relance…', function (nc) {
         remplacer(nc); S.reporter = false; RENDUS.fiche(); renderOnglets(); majRecap();
-        toast('Relance reportée au ' + dateLongue(d).toLowerCase() + (nc.invites && !nc.partageErreur ? ', rappel renvoyé à ' + nc.invites : '') + '.');
+        toast('Relance reportée au ' + dateLongue(d).toLowerCase() + (nc.invites && nc.eventId ? ', invités prévenus' : '') + '.');
       });
     },
     'demander-suppr': function () {
@@ -1466,7 +1465,7 @@ import * as AT from './attente.js';
       aller('contacts', 'replace');
       majAttente();
       if (manquants && manquants.length) {
-        toast('Certaines autorisations ont été refusées : Agenda ou partage par email peuvent ne pas fonctionner.', true);
+        toast('Certaines autorisations ont été refusées : les relances dans l\'Agenda peuvent ne pas fonctionner.', true);
       }
       majRecap();
     }, {
