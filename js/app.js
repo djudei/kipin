@@ -320,6 +320,7 @@ import * as AT from './attente.js';
               '<button class="lien" style="align-self:center" data-a="connexion" data-v="autre">Utiliser un autre compte</button>'
             : '<button class="btn google" data-a="avant-google">Se connecter avec Google</button>') +
           '<p class="note" style="text-align:center">Avec ton adresse Gmail. Kipin ne voit que les fichiers qu\'il crée dans ton Drive.</p>' +
+          '<a class="lien" style="align-self:center;font-size:0.82rem" href="confidentialite.html" target="_blank" rel="noopener">Confidentialité et données</a>' +
         '</div>' +
       '</div>';
   };
