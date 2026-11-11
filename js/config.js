@@ -17,7 +17,7 @@ export const CONFIG = {
     heure: 9,            // heure de l'événement Agenda
     duree: 15,           // durée de l'événement, en minutes
     agendaDefaut: true,  // case « Événement Google Agenda » cochée par défaut
-    recapDefaut: true,   // case « Récap du lundi » cochée par défaut
+    recapDefaut: false,  // case « Récap du lundi » décochée par défaut
     recapActif: true     // rendez-vous « relances de la semaine » chaque lundi 8 h 45
   }
 };

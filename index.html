@@ -12,6 +12,11 @@
   <meta name="apple-mobile-web-app-title" content="Kipin">
   <meta name="apple-mobile-web-app-status-bar-style" content="default">
   <title>Kipin</title>
+  <script>
+    // Adresse tapée avec des majuscules (ex. /Kipin/) : on repart sur l'adresse officielle en minuscules.
+    if (location.pathname !== location.pathname.toLowerCase()) location.replace(location.pathname.toLowerCase() + location.search + location.hash);
+  </script>
+  <script src="https://accounts.google.com/gsi/client" async></script>
   <link rel="manifest" href="manifest.webmanifest">
   <link rel="icon" type="image/png" sizes="192x192" href="icons/icon-192.png">
   <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
@@ -29,6 +34,7 @@
     <section id="e-fiche" class="ecran" hidden></section>
     <section id="e-rappels" class="ecran" hidden></section>
     <section id="e-reglages" class="ecran" hidden></section>
+    <section id="e-attente" class="ecran" hidden></section>
   </main>
 
   <nav id="onglets" class="onglets" aria-label="Navigation" hidden></nav>
@@ -41,6 +47,15 @@
       </div>
       <p id="occupe-aide" class="note" hidden>C'est plus long que d'habitude. Tu peux attendre ou annuler.</p>
       <button id="occupe-annuler" class="btn sec" data-a="annuler-attente" hidden>Annuler</button>
+    </div>
+  </div>
+  <div id="reprise" class="occupe reprise" hidden>
+    <div class="occupe-boite pile" role="alertdialog" aria-labelledby="reprise-titre" aria-describedby="reprise-texte">
+      <h2 id="reprise-titre" class="t2">Connexion Google expirée</h2>
+      <p id="reprise-texte" class="note">Pour ta sécurité, Google la renouvelle toutes les heures. Ce que tu faisais est en pause : rien n'est perdu.</p>
+      <p id="reprise-erreur" class="note erreur-txt" hidden></p>
+      <button class="btn pri" data-a="reprendre">Continuer</button>
+      <button class="btn sec" data-a="abandonner-reprise">Annuler</button>
     </div>
   </div>
   <div id="toast" class="toast" role="status" aria-live="polite" hidden></div>

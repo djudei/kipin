@@ -26,7 +26,7 @@ export async function choisirDansCarnet() {
     prenom: morceaux.length > 1 ? morceaux.slice(0, -1).join(' ') : nom,
     nom: morceaux.length > 1 ? morceaux[morceaux.length - 1] : '',
     email: (c.email && c.email[0]) || '',
-    telephone: (c.tel && c.tel[0]) || '',
+    ...repartirNumeros((c.tel || []).map(n => ({ valeur: n, params: '' }))),
     adresse: a ? [(a.addressLine || []).join(' '), [a.postalCode, a.city].filter(Boolean).join(' '), a.country].filter(Boolean).join(', ') : ''
   });
 }
@@ -107,9 +107,7 @@ function versChamps(c) {
   const email = premier('EMAIL');
   if (email) champs.email = desechapper(email.valeur).replace(/^mailto:/i, '');
 
-  const tels = c.TEL || [];
-  const mobile = tels.find(t => /CELL|MOBILE|IPHONE/.test(t.params) || /type=cell/i.test(t.params)) || tels[0];
-  if (mobile) champs.telephone = desechapper(mobile.valeur).replace(/^tel:/i, '');
+  Object.assign(champs, repartirNumeros((c.TEL || []).map(t => ({ valeur: desechapper(t.valeur).replace(/^tel:/i, ''), params: t.params }))));
 
   const liens = (c.URL || []).concat(c['X-SOCIALPROFILE'] || []).map(u => desechapper(u.valeur));
   const linkedin = liens.find(u => /linkedin\.com/i.test(u));
@@ -141,7 +139,7 @@ function lireMecard(texte) {
   const n = valeur('N').split(',');
   champs.nom = (n[0] || '').trim();
   champs.prenom = (n[1] || '').trim();
-  champs.telephone = valeur('TEL');
+  Object.assign(champs, repartirNumeros(corps.split(';').filter(p => /^TEL:/i.test(p)).map(p => ({ valeur: p.slice(4).trim(), params: '' }))));
   champs.email = valeur('EMAIL');
   champs.societe = valeur('ORG');
   champs.poste = valeur('TITLE');
@@ -205,7 +203,30 @@ export async function chercherQR(dataUrl) {
   return null;
 }
 
-const CLES = ['prenom', 'nom', 'societe', 'poste', 'email', 'telephone', 'site', 'linkedin', 'adresse', 'contexte'];
+/**
+ * Range les numéros en mobile / fixe / standard.
+ * Type indiqué dans le fichier (CELL, WORK, MAIN…) d'abord ; sinon un numéro français en 06 / 07 est un mobile.
+ */
+export function estMobile(numero) {
+  const d = String(numero || '').replace(/[^\d+]/g, '').replace(/^\+33|^0033/, '0');
+  return /^0[67]/.test(d);
+}
+function repartirNumeros(liste) {
+  const r = { telephone: '', fixe: '', standard: '' };
+  liste.filter(n => n.valeur && !/FAX/i.test(n.params)).forEach(n => {
+    const p = n.params || '';
+    const cle = /CELL|MOBILE|IPHONE/i.test(p) ? 'telephone'
+      : /MAIN|STANDARD|X-STANDARD|COMPANY/i.test(p) ? 'standard'
+      : /WORK|HOME|VOICE/i.test(p) ? (estMobile(n.valeur) ? 'telephone' : 'fixe')
+      : estMobile(n.valeur) ? 'telephone' : 'fixe';
+    if (!r[cle]) r[cle] = n.valeur;
+    else if (!r.fixe && cle !== 'fixe') r.fixe = n.valeur;
+    else if (!r.standard) r.standard = n.valeur;
+  });
+  return r;
+}
+
+const CLES = ['prenom', 'nom', 'societe', 'poste', 'email', 'telephone', 'fixe', 'standard', 'site', 'linkedin', 'adresse', 'contexte'];
 function completer(c) {
   const out = {};
   CLES.forEach(k => { out[k] = String((c && c[k]) || '').trim(); });

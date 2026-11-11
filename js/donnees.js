@@ -15,16 +15,16 @@ const GMAIL = 'https://gmail.googleapis.com/gmail/v1/users/me/messages/send';
 
 export const COLONNES = [
   ['id', 'ID'], ['ajoute', 'Ajouté le'], ['prenom', 'Prénom'], ['nom', 'Nom'],
-  ['societe', 'Société'], ['poste', 'Poste'], ['email', 'Email'], ['telephone', 'Téléphone'],
-  ['site', 'Site web'], ['linkedin', 'LinkedIn'], ['adresse', 'Adresse'], ['contexte', 'Contexte'],
+  ['societe', 'Société'], ['poste', 'Poste'], ['email', 'Email'], ['telephone', 'Mobile'],
+  ['fixe', 'Fixe'], ['standard', 'Standard'], ['site', 'Site web'], ['linkedin', 'LinkedIn'], ['adresse', 'Adresse'], ['contexte', 'Contexte'],
   ['priorite', 'Priorité'], ['tag', 'Tag'], ['dateRelance', 'Date de relance'], ['agenda', 'Agenda'],
   ['recap', 'Récap du lundi'], ['statut', 'Statut'], ['eventId', 'ID événement'], ['photo', 'Photo'],
   ['photoIds', 'ID photos'], ['invites', 'Rappel partagé avec']
 ];
-const DERNIERE_COL = String.fromCharCode(64 + COLONNES.length); // 22 colonnes → « V »
+const DERNIERE_COL = String.fromCharCode(64 + COLONNES.length); // 24 colonnes → « X »
 export const STATUTS = ['À relancer', 'Relancé', 'Sans suite'];
 export const PRIORITES = ['Haute', 'Moyenne', 'Basse'];
-const CHAMPS_CARTE = ['prenom', 'nom', 'societe', 'poste', 'email', 'telephone', 'site', 'linkedin', 'adresse'];
+const CHAMPS_CARTE = ['prenom', 'nom', 'societe', 'poste', 'email', 'telephone', 'fixe', 'standard', 'site', 'linkedin', 'adresse'];
 
 /* Espace de l'utilisateur, rempli par charger() */
 const E = { sheetId: '', gidContacts: null, dossierId: '', config: {}, email: '' };
@@ -49,6 +49,7 @@ export async function charger() {
   }
   const meta = await api(SHEETS + '/' + E.sheetId + '?fields=sheets.properties');
   meta.sheets.forEach(s => { if (s.properties.title === 'Contacts') E.gidContacts = s.properties.sheetId; });
+  await ajouterColonnesTelephone();
 
   const lots = await api(SHEETS + '/' + E.sheetId + '/values:batchGet?majorDimension=ROWS&ranges=' +
     enc('Contacts!A2:' + DERNIERE_COL) + '&ranges=' + enc('Réglages!A2:B') + '&ranges=' + enc('Config!A2:B'));
@@ -70,6 +71,24 @@ export async function charger() {
     reglages: lireReglages(),
     cleGemini: E.config.gemini || ''
   };
+}
+
+/**
+ * Sheets créés avant les trois numéros : on insère « Fixe » et « Standard » juste après
+ * l'ancienne colonne « Téléphone » (renommée « Mobile »). Les numéros déjà saisis restent en place.
+ * Vérifié sur l'en-tête : ne s'applique jamais deux fois.
+ */
+async function ajouterColonnesTelephone() {
+  if (E.gidContacts === null) return;
+  const r = await api(SHEETS + '/' + E.sheetId + '/values/' + enc('Contacts!A1:X1'));
+  const entete = (r.values && r.values[0]) || [];
+  if (entete[8] === 'Fixe' || entete[7] !== 'Téléphone') return;
+  await api(SHEETS + '/' + E.sheetId + ':batchUpdate', {
+    corps: { requests: [{ insertDimension: { range: { sheetId: E.gidContacts, dimension: 'COLUMNS', startIndex: 8, endIndex: 10 }, inheritFromBefore: true } }] }
+  });
+  await api(SHEETS + '/' + E.sheetId + '/values/' + enc('Contacts!A1') + '?valueInputOption=RAW', {
+    methode: 'PUT', corps: { values: [COLONNES.map(c => c[1])] }
+  });
 }
 
 /** Texte noir sans fond sur tout l'onglet Contacts, en-tête en gras. */
@@ -444,7 +463,9 @@ function descriptionEvenement(c) {
   const l = [];
   if (c.poste || c.societe) l.push([c.poste, c.societe].filter(Boolean).join(' · '));
   if (c.email) l.push('Email : ' + c.email);
-  if (c.telephone) l.push('Téléphone : ' + c.telephone);
+  if (c.telephone) l.push('Mobile : ' + c.telephone);
+  if (c.fixe) l.push('Fixe : ' + c.fixe);
+  if (c.standard) l.push('Standard : ' + c.standard);
   if (c.linkedin) l.push('LinkedIn : ' + c.linkedin);
   if (c.contexte) l.push('', 'Contexte : ' + c.contexte);
   l.push('', 'Ajouté avec Kipin : ' + urlApp());

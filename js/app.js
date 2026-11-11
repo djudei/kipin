@@ -7,6 +7,7 @@ import * as G from './google.js';
 import * as D from './donnees.js';
 import * as IA from './gemini.js';
 import * as IM from './import.js';
+import * as AT from './attente.js';
 
   /* ================= État ================= */
   var S = {
@@ -37,7 +38,9 @@ import * as IM from './import.js';
     tagEdition: null,
     erreurConnexion: '',
     qr: null,
-    source: ''
+    source: '',
+    attente: [],      // cartes photographiées pas encore lues (gardées dans le téléphone)
+    attenteId: null   // carte en attente en cours de lecture
   };
 
   var $ = function (id) { return document.getElementById(id); };
@@ -73,48 +76,25 @@ import * as IM from './import.js';
       libre(); if (ok) ok(v);
     }, function (e) {
       if (jeton.annule) return;
-      if (e && e.name === 'ErreurSession') { reconnecter(); return; }
       libre();
+      if (e && e.name === 'ErreurSession') { toast(messageErreur(e), true); return; }
       if (options.ko) options.ko(messageErreur(e));
       else toast(messageErreur(e), true);
     });
   }
 
+  /** Appel en arrière-plan : jamais de fenêtre de reconnexion pour lui, il attendra la prochaine action. */
   function appelDiscret(fn) {
+    if (!G.jetonValide() || G.repriseEnCours()) return;
     Promise.resolve().then(fn).catch(function () {});
   }
 
-  /** Met de côté l'écran en cours, puis renouvelle la connexion Google. */
-  function reconnecter() {
-    try {
-      sessionStorage.setItem('kipin.brouillon', JSON.stringify({
-        ecran: S.ecran, onglet: S.onglet, form: S.form, edition: S.edition, saisieManuelle: S.saisieManuelle,
-        incertains: S.incertains, images: S.images, photoIds: S.photoIds, courantId: S.courantId
-      }));
-    } catch (e) { /* trop gros ou indisponible : on repartira de l'accueil */ }
-    occupe('Reconnexion à Google…');
-    G.seConnecter(true);
-  }
-
-  function restaurerBrouillon() {
-    var b = null;
-    try { b = JSON.parse(sessionStorage.getItem('kipin.brouillon')); sessionStorage.removeItem('kipin.brouillon'); } catch (e) { b = null; }
-    if (!b || !b.ecran) return false;
-    S.onglet = b.onglet || 'contacts';
-    S.courantId = b.courantId || null;
-    S.images = b.images || { recto: null, verso: null };
-    S.photoIds = b.photoIds || [];
-    if (b.ecran === 'verif' && b.form) {
-      S.form = b.form; S.edition = !!b.edition; S.saisieManuelle = !!b.saisieManuelle; S.incertains = b.incertains || [];
-      montrer('verif', 'replace');
-      toast('Reconnecté. Tu peux reprendre où tu en étais.');
-      return true;
-    }
-    if (b.ecran === 'capture' && S.images.recto) { montrer('capture', 'replace'); return true; }
-    if (b.ecran === 'fiche' && contact(S.courantId)) { aller('fiche', 'replace'); return true; }
-    if (['contacts', 'rappels', 'reglages'].indexOf(b.ecran) >= 0) { aller(b.ecran, 'replace'); return true; }
-    return false;
-  }
+  /* ================= Reprise après expiration de la connexion ================= */
+  // L'action en cours attend dans google.js ; cette fenêtre la relance (ou l'annule) en un appui.
+  G.quandRepriseDemandee(function (actif) {
+    $('reprise-erreur').hidden = true;
+    $('reprise').hidden = !actif;
+  });
 
   var minuteurAnnuler = null;
   function occupe(message, annulable) {
@@ -200,7 +180,7 @@ import * as IM from './import.js';
   };
 
   /* ================= Navigation et historique ================= */
-  var ECRANS = ['connexion', 'cle', 'contacts', 'capture', 'verif', 'fiche', 'rappels', 'reglages'];
+  var ECRANS = ['connexion', 'cle', 'contacts', 'capture', 'verif', 'fiche', 'rappels', 'reglages', 'attente'];
   var ONGLETS = ['contacts', 'rappels', 'reglages'];
   var RENDUS = {};
 
@@ -230,6 +210,7 @@ import * as IM from './import.js';
       S.images = { recto: null, verso: null };
       S.erreurLecture = '';
       S.qr = null;
+      S.attenteId = null;
     }
     if (nom !== 'verif') { S.form = null; S.edition = false; }
     if (nom !== 'fiche') { S.reporter = false; S.confirmSuppr = false; }
@@ -241,6 +222,7 @@ import * as IM from './import.js';
     var nom = st.ecran || 'contacts';
     if (!S.configure) return;
     if (nom === 'connexion' || nom === 'cle') nom = 'contacts';
+    if (nom === 'attente') { aller('attente', 'none'); return; }
     if (nom === 'fiche') {
       if (st.id && contact(st.id)) S.courantId = st.id; else nom = S.onglet;
     }
@@ -305,7 +287,10 @@ import * as IM from './import.js';
         '</div>' +
         '<div class="pile">' +
           (S.erreurConnexion ? '<div class="alerte" role="alert"><span class="ico">' + ICO.alerte + '</span><span>' + esc(S.erreurConnexion) + '</span></div>' : '') +
-          '<button class="btn google" data-a="connexion">Se connecter avec Google</button>' +
+          (G.emailMemorise()
+            ? '<button class="btn google" data-a="connexion">Continuer avec ' + esc(G.emailMemorise()) + '</button>' +
+              '<button class="lien" style="align-self:center" data-a="connexion" data-v="autre">Utiliser un autre compte</button>'
+            : '<button class="btn google" data-a="connexion">Se connecter avec Google</button>') +
           '<p class="note" style="text-align:center">Avec ton adresse Gmail. Kipin ne voit que les fichiers qu\'il crée dans ton Drive.</p>' +
         '</div>' +
       '</div>';
@@ -382,14 +367,14 @@ import * as IM from './import.js';
   }
   function trouverDoublon(f) {
     var email = normTxt(f.email);
-    var tel = chiffresTel(f.telephone);
+    var tels = [f.telephone, f.fixe].map(chiffresTel).filter(Boolean);
     var nom = f.prenom && f.nom ? normTxt(f.prenom + ' ' + f.nom) : '';
     var trouve = null;
     S.contacts.forEach(function (c) {
       if (f.id && c.id === f.id) return;
       var raison = '';
       if (email && normTxt(c.email) === email) raison = 'même email';
-      else if (tel && chiffresTel(c.telephone) === tel) raison = 'même téléphone';
+      else if (tels.length && [c.telephone, c.fixe].map(chiffresTel).some(function (t) { return t && tels.indexOf(t) >= 0; })) raison = 'même téléphone';
       else if (nom && c.prenom && c.nom && normTxt(c.prenom + ' ' + c.nom) === nom) raison = 'même nom';
       if (raison && (!trouve || (c.ajoute || '') > (trouve.c.ajoute || ''))) trouve = { c: c, raison: raison };
     });
@@ -409,6 +394,10 @@ import * as IM from './import.js';
     $('e-contacts').innerHTML =
       '<header class="barre barre-titre"><div class="marque"><span class="logo">Kipin</span><span class="sous">keep in touch</span></div></header>' +
       '<div class="contenu pile">' +
+        (S.attente.length
+          ? '<button class="ligne attente-bandeau" data-a="voir-attente"><span class="avatar retard" aria-hidden="true">' + S.attente.length + '</span>' +
+            '<span class="ligne-txt"><b>' + (S.attente.length > 1 ? S.attente.length + ' cartes à lire' : '1 carte à lire') + '</b><span>Photographiées mais pas encore lues. Touche pour les reprendre.</span></span></button>'
+          : '') +
         '<button class="scan" data-a="nouveau-scan">' +
           '<span class="scan-ico">' + ICO.photo + '</span>' +
           '<span class="scan-txt"><b>Scanner une carte</b>' + (S.contacts.length ? '' : '<span>Photo ou album, champs remplis tout seuls</span>') + '</span>' +
@@ -439,7 +428,7 @@ import * as IM from './import.js';
     var liste = S.contacts.filter(function (c) {
       if (S.filtre !== 'tous' && statutDe(c) !== S.filtre) return false;
       if (!q) return true;
-      return normTxt([c.prenom, c.nom, c.societe, c.poste, c.email, c.tag, c.contexte, c.adresse, c.telephone].join(' ')).indexOf(q) >= 0;
+      return normTxt([c.prenom, c.nom, c.societe, c.poste, c.email, c.tag, c.contexte, c.adresse, c.telephone, c.fixe, c.standard].join(' ')).indexOf(q) >= 0;
     }).sort(function (x, y) { return (x.ajoute || '') < (y.ajoute || '') ? 1 : -1; });
     zone.innerHTML = liste.length ? '<div class="liste">' + liste.map(ligneContact).join('') + '</div>' : vide('Aucun contact ne correspond.');
   }
@@ -514,6 +503,36 @@ import * as IM from './import.js';
       '</button>';
   }
 
+  /* ================= Écran : cartes à lire ================= */
+  function majAttente() {
+    return AT.lister().then(function (l) {
+      S.attente = l;
+      if (S.ecran === 'contacts') RENDUS.contacts();
+      if (S.ecran === 'attente') RENDUS.attente();
+    });
+  }
+
+  RENDUS.attente = function () {
+    var lignes = S.attente.map(function (a) {
+      var d = new Date(a.ajoute);
+      var quand = dateCourte(iso(d)) + ' à ' + d.getHours() + ' h ' + pad(d.getMinutes());
+      return '<div class="carte attente-carte">' +
+        '<img src="' + a.recto.url + '" alt="Carte photographiée ' + esc(quand) + '">' +
+        '<div class="pile" style="gap:0.5rem;flex:1;min-width:0">' +
+          '<span><strong>' + esc(quand) + '</strong>' + (a.verso ? ' · recto et verso' : '') + '</span>' +
+          (a.raison ? '<span class="note">' + esc(a.raison) + '</span>' : '') +
+          '<div class="ligne-ajout"><button class="btn pri mini" data-a="lire-attente" data-v="' + esc(a.id) + '">Lire</button>' +
+          '<button class="btn sec mini" data-a="suppr-attente" data-v="' + esc(a.id) + '">Supprimer</button></div>' +
+        '</div></div>';
+    }).join('');
+    $('e-attente').innerHTML =
+      '<header class="barre"><button class="icone" data-a="retour" data-v="onglet" aria-label="Retour">' + ICO.retour + '</button><h1 class="t2">Cartes à lire</h1></header>' +
+      '<div class="contenu pile">' +
+        '<p class="note">Ces photos sont gardées dans ce téléphone jusqu\'à ce que le contact soit enregistré.</p>' +
+        (lignes || vide('Aucune carte en attente.')) +
+      '</div>';
+  };
+
   /* ================= Écran : photo ================= */
   RENDUS.capture = function () {
     var r = S.images.recto, v = S.images.verso;
@@ -522,7 +541,9 @@ import * as IM from './import.js';
       '<div class="contenu pile">' +
         (S.erreurLecture
           ? '<div class="alerte" role="alert"><span class="ico">' + ICO.alerte + '</span><div class="pile" style="gap:0.5rem"><span><strong>Lecture impossible.</strong> ' + esc(S.erreurLecture) + '</span>' +
-            '<div class="ligne-ajout"><button class="btn sec mini" data-a="lire">Réessayer</button><button class="btn sec mini" data-a="manuel">Saisir à la main</button></div></div></div>'
+            (S.attenteId ? '<span>La photo est gardée dans « Cartes à lire » : tu pourras la reprendre plus tard.</span>' : '') +
+            '<div class="ligne-ajout"><button class="btn sec mini" data-a="lire">Réessayer</button><button class="btn sec mini" data-a="manuel">Saisir à la main</button>' +
+            (S.attenteId ? '<button class="btn sec mini" data-a="onglet" data-v="contacts">Plus tard</button>' : '') + '</div></div></div>'
           : '') +
         bandeauQR() +
         '<h2 class="eyebrow">Recto</h2>' +
@@ -643,7 +664,9 @@ import * as IM from './import.js';
     ['societe', 'Société', 'text'],
     ['poste', 'Poste', 'text'],
     ['email', 'Email', 'email'],
-    ['telephone', 'Téléphone', 'tel'],
+    ['telephone', 'Mobile', 'tel'],
+    ['fixe', 'Fixe (ligne directe)', 'tel'],
+    ['standard', 'Standard', 'tel'],
     ['site', 'Site web', 'url']
   ];
 
@@ -651,7 +674,7 @@ import * as IM from './import.js';
     champs = champs || {};
     return {
       prenom: champs.prenom || '', nom: champs.nom || '', societe: champs.societe || '', poste: champs.poste || '',
-      email: champs.email || '', telephone: champs.telephone || '', site: champs.site || '',
+      email: champs.email || '', telephone: champs.telephone || '', fixe: champs.fixe || '', standard: champs.standard || '', site: champs.site || '',
       linkedin: champs.linkedin || '', adresse: champs.adresse || '',
       contexte: '', priorite: 'Moyenne', tag: '', invites: '',
       dateRelance: plusJours(auj(), S.reglages.delai || 30),
@@ -740,6 +763,7 @@ import * as IM from './import.js';
               '<div class="puces">' + raccourcis + '</div>' +
               '<p class="note">Aucune relance : le contact est simplement enregistré, sans rappel ni événement Agenda.</p>'
             : '<label class="champ">Date · ' + esc(heureTxt()) + ', ' + esc(S.reglages.duree) + ' min<input type="date" data-f="dateRelance" value="' + esc(f.dateRelance) + '"></label>' +
+          '<span class="date-lettres" id="date-lettres">' + esc(f.dateRelance ? dateLongue(f.dateRelance) : '') + '</span>' +
           '<div class="puces">' + raccourcis + '</div>' +
           '<label class="case"><input type="checkbox" data-f="agenda"' + (f.agenda ? ' checked' : '') + '><span>Événement Google Agenda<small>Notification sur le téléphone le jour J</small></span></label>' +
           '<label class="case"><input type="checkbox" data-f="recap"' + (f.recap ? ' checked' : '') + '><span>Récap du lundi<small>Dans le rendez-vous « relances de la semaine » de ton Agenda</small></span></label>' +
@@ -771,23 +795,29 @@ import * as IM from './import.js';
     var c = contact(S.courantId);
     if (!c) { aller(S.onglet, 'replace'); return; }
     var site = c.site ? (/^https?:\/\//i.test(c.site) ? c.site : 'https://' + c.site) : '';
-    var tel = c.telephone ? c.telephone.replace(/[^\d+]/g, '') : '';
+    var numero = c.telephone || c.fixe || c.standard;
+    var tel = numero ? numero.replace(/[^\d+]/g, '') : '';
     var action = function (href, ico, libelle) {
       return href
         ? '<a class="action" href="' + esc(href) + '" target="_blank" rel="noopener">' + ico + esc(libelle) + '</a>'
         : '<span class="action off" aria-hidden="true">' + ico + esc(libelle) + '</span>';
     };
-    var coord = [['Site web', c.site], ['Adresse', c.adresse], ['LinkedIn', c.linkedin ? c.linkedin.replace(/^https?:\/\/(www\.)?/, '') : '']]
+    var lienTel = function (n) { return n ? 'tel:' + n.replace(/[^\d+]/g, '') : ''; };
+    var coord = [['Mobile', c.telephone, lienTel(c.telephone)], ['Fixe', c.fixe, lienTel(c.fixe)], ['Standard', c.standard, lienTel(c.standard)],
+      ['Site web', c.site], ['Adresse', c.adresse], ['LinkedIn', c.linkedin ? c.linkedin.replace(/^https?:\/\/(www\.)?/, '') : '']]
       .filter(function (x) { return x[1]; })
-      .map(function (x) { return '<div class="coord"><span>' + x[0] + '</span>' + esc(x[1]) + '</div>'; }).join('');
+      .map(function (x) {
+        return '<div class="coord"><span>' + x[0] + '</span>' + (x[2] ? '<a class="lien" href="' + esc(x[2]) + '">' + esc(x[1]) + '</a>' : esc(x[1])) + '</div>';
+      }).join('');
     var reporter = S.reporter
       ? '<div class="pile" style="gap:0.6rem">' +
           '<label class="champ">Nouvelle date<input type="date" id="in-report" value="' + esc(c.dateRelance || plusJours(auj(), 7)) + '"></label>' +
+          '<span class="date-lettres" id="report-lettres">' + esc(dateLongue(c.dateRelance || plusJours(auj(), 7))) + '</span>' +
           '<div class="puces">' + [7, 15, 30].map(function (n) { return '<button class="puce" data-a="report-rapide" data-v="' + n + '">Dans ' + n + ' j</button>'; }).join('') + '</div>' +
           '<div class="grille2"><button class="btn sec" data-a="annuler-report">Annuler</button><button class="btn pri mini" style="width:100%" data-a="valider-report">Valider</button></div>' +
         '</div>'
       : '<button class="btn sec" data-a="ouvrir-report">' + (c.dateRelance ? 'Reporter la relance' : 'Programmer une relance') + '</button>';
-    var coordCarte = [c.email, c.telephone].filter(Boolean).map(function (t) {
+    var coordCarte = [c.email, c.telephone ? 'M. ' + c.telephone : '', c.fixe ? 'T. ' + c.fixe : ''].filter(Boolean).map(function (t) {
       return '<span class="cv-ligne" style="font-size:' + taillePourCarte(t, 0.78, 0.6, 0.56) + '">' + esc(t) + '</span>';
     }).join('');
 
@@ -878,9 +908,8 @@ import * as IM from './import.js';
         '</section>' +
         '<section class="carte pile">' +
           '<h2 class="eyebrow">Récap du lundi</h2>' +
-          '<label class="case"><input type="checkbox" data-r="recapActif"' + (r.recapActif ? ' checked' : '') + '><span>Rendez-vous « relances de la semaine »<small>Chaque lundi à 8 h 45 dans ton Agenda, juste avant les relances du jour,, avec uniquement les relances de la semaine et celles à rattraper.</small></span></label>' +
+          '<label class="case"><input type="checkbox" data-r="recapActif"' + (r.recapActif ? ' checked' : '') + '><span>Rendez-vous « relances de la semaine »<small>Chaque lundi à 8 h 45 dans ton Agenda, juste avant les relances du jour, avec uniquement les relances de la semaine et celles à rattraper.</small></span></label>' +
         '</section>' +
-        '<button class="btn pri" data-a="sauver-reglages">Enregistrer les réglages</button>' +
         '<section class="carte pile" style="gap:0.4rem">' +
           '<h2 class="eyebrow">Emails d\'invitation</h2>' +
           '<p class="note">Proposés en un geste quand tu partages un rappel. Les adresses saisies dans une fiche s\'ajoutent ici toutes seules.</p>' +
@@ -904,7 +933,10 @@ import * as IM from './import.js';
           '<p class="texte">Connecté avec <strong>' + esc(S.email) + '</strong></p>' +
           '<button class="btn sec" data-a="deconnexion">Se déconnecter</button>' +
         '</section>' +
-      '</div>';
+      '</div>' +
+      '<div class="espace"></div>' +
+      '<div class="pied pied-onglets"><button class="btn pri" data-a="sauver-reglages">Enregistrer les réglages</button>' +
+        '<span class="note">Délai, heure, durée, cases par défaut et récap du lundi. Les tags et les emails s\'enregistrent tout seuls.</span></div>';
   };
 
   function lireReglagesForm() {
@@ -919,11 +951,21 @@ import * as IM from './import.js';
 
   /* ================= Actions ================= */
   var ACTIONS = {
-    'connexion': function () {
+    'connexion': function (v) {
       S.erreurConnexion = '';
-      occupe('Ouverture de Google…');
-      G.seConnecter(false);
+      // La fenêtre Google s'ouvre dans le prolongement direct de l'appui (sinon le téléphone la bloque).
+      G.connecter(v === 'autre').then(function (manquants) { chargerKipin(manquants); }, function (e) {
+        S.erreurConnexion = messageErreur(e);
+        montrer('connexion', 'replace');
+      });
     },
+    'reprendre': function () {
+      G.reprendre().catch(function (e) {
+        $('reprise-erreur').textContent = messageErreur(e);
+        $('reprise-erreur').hidden = false;
+      });
+    },
+    'abandonner-reprise': function () { G.abandonnerReprise(); },
     'enregistrer-cle': function () {
       var cle = ($('in-cle').value || '').trim();
       if (!cle) { toast('Colle ta clé Gemini pour commencer.', true); return; }
@@ -947,7 +989,22 @@ import * as IM from './import.js';
     'filtre': function (v) { S.filtre = v; RENDUS.contacts(); },
     'ouvrir': function (v) { S.courantId = v; aller('fiche'); },
 
+    'voir-attente': function () { aller('attente'); },
+    'lire-attente': function (v) {
+      var a = S.attente.filter(function (x) { return x.id === v; })[0];
+      if (!a) return;
+      ACTIONS['nouveau-scan']();
+      S.images = { recto: AT.versImage(a.recto), verso: AT.versImage(a.verso) };
+      S.attenteId = a.id;
+      montrer('capture', 'replace');
+      ACTIONS.lire();
+    },
+    'suppr-attente': function (v) {
+      AT.retirer(v).then(majAttente);
+      toast('Photo supprimée.');
+    },
     'nouveau-scan': function () {
+      S.attenteId = null;
       S.qr = null;
       S.source = '';
       S.images = { recto: null, verso: null };
@@ -990,6 +1047,15 @@ import * as IM from './import.js';
       if (!S.images.recto) return;
       oublierPhotos();
       S.erreurLecture = '';
+      // Pas de réseau (salon, sous-sol) : la carte est gardée tout de suite, on la lira plus tard.
+      if (navigator.onLine === false) {
+        AT.garder(S.images, 'Pas de réseau au moment de la photo.', S.attenteId).then(function () {
+          majAttente();
+          aller('contacts', 'replace');
+          toast('Pas de réseau : carte gardée dans « Cartes à lire ».');
+        }, function (e) { S.erreurLecture = 'Pas de réseau, et la photo n\'a pas pu être gardée (' + messageErreur(e) + ').'; RENDUS.capture(); });
+        return;
+      }
       var imgs = [S.images.recto];
       if (S.images.verso) imgs.push(S.images.verso);
       var envoi = imgs.map(function (i) { return { data: i.data, mimeType: i.mimeType }; });
@@ -1028,8 +1094,9 @@ import * as IM from './import.js';
         },
         ko: function (message) {
           S.erreurLecture = message;
-          RENDUS.capture();
-          window.scrollTo(0, 0);
+          // La photo n'est jamais perdue : gardée dans le téléphone tant que le contact n'est pas enregistré.
+          AT.garder(S.images, message, S.attenteId).then(function (id) { S.attenteId = id; majAttente(); }, function () {})
+            .then(function () { if (S.ecran === 'capture') { RENDUS.capture(); window.scrollTo(0, 0); } });
         }
       });
     },
@@ -1101,6 +1168,7 @@ import * as IM from './import.js';
           appelDiscret(function () { return D.ajouterAuCarnet(c.invites); });
         }
         remplacer(c);
+        if (S.attenteId) { AT.retirer(S.attenteId).then(majAttente); S.attenteId = null; }
         S.courantId = c.id;
         S.photoIds = [];
         S.images = { recto: null, verso: null };
@@ -1146,7 +1214,7 @@ import * as IM from './import.js';
     },
     'ouvrir-report': function () { S.reporter = true; RENDUS.fiche(); },
     'annuler-report': function () { S.reporter = false; RENDUS.fiche(); },
-    'report-rapide': function (v) { $('in-report').value = plusJours(auj(), v); },
+    'report-rapide': function (v) { $('in-report').value = plusJours(auj(), v); $('report-lettres').textContent = dateLongue($('in-report').value); },
     'valider-report': function () {
       var d = $('in-report').value;
       if (!d) { toast('Choisis une date.', true); return; }
@@ -1265,6 +1333,9 @@ import * as IM from './import.js';
   document.addEventListener('input', function (ev) {
     var t = ev.target;
     if (t.id === 'in-recherche') { S.recherche = t.value; renderListeContacts(); return; }
+    // La date est aussi écrite en toutes lettres : pas de confusion 12/07 / 07/12, quel que soit le réglage du téléphone.
+    if (t.id === 'in-report' && $('report-lettres')) { $('report-lettres').textContent = t.value ? dateLongue(t.value) : ''; return; }
+    if (t.getAttribute && t.getAttribute('data-f') === 'dateRelance' && $('date-lettres')) { $('date-lettres').textContent = t.value ? dateLongue(t.value) : ''; return; }
     var k = t.getAttribute && t.getAttribute('data-f');
     if (k === 'prenom' || k === 'nom' || k === 'societe') {
       lireForm();
@@ -1284,12 +1355,6 @@ import * as IM from './import.js';
     if (correspondances[id]) { ev.preventDefault(); ACTIONS[correspondances[id]](); }
   });
 
-  /* Retour sur l'app après une pause : renouvelle la connexion si elle a expiré. */
-  document.addEventListener('visibilitychange', function () {
-    if (document.visibilityState !== 'visible' || !S.configure) return;
-    if (!G.jetonValide() && ['contacts', 'rappels', 'reglages', 'fiche'].indexOf(S.ecran) >= 0) reconnecter();
-  });
-
   /* ================= Démarrage ================= */
   function demarrer() {
     if (CONFIG.CLIENT_ID.indexOf('A_REMPLACER') === 0) {
@@ -1297,18 +1362,18 @@ import * as IM from './import.js';
       montrer('connexion', 'replace');
       return;
     }
-    var session = G.demarrerSession();
-    if (session.statut === 'redirige') { occupe('Connexion à Google…'); return; }
-    if (session.statut === 'a-connecter') {
-      S.erreurConnexion = session.erreur || '';
-      montrer('connexion', 'replace');
-      return;
-    }
+    G.prechargerConnexion();
+    if (!G.jetonValide()) { montrer('connexion', 'replace'); return; }
+    chargerKipin(G.scopesManquants());
+  }
+
+  function chargerKipin(manquants) {
     appel(function () { return D.charger(); }, 'Chargement de Kipin…', function (e) {
       appliquerEtat(e);
       if (!S.configure) { montrer('cle', 'replace'); return; }
-      if (!restaurerBrouillon()) aller('contacts', 'replace');
-      if (session.scopesManquants && session.scopesManquants.length) {
+      aller('contacts', 'replace');
+      majAttente();
+      if (manquants && manquants.length) {
         toast('Certaines autorisations ont été refusées : Agenda ou partage par email peuvent ne pas fonctionner.', true);
       }
       majRecap();

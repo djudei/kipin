@@ -5,7 +5,7 @@
  * Kipin prend le « Flash » le plus récent et bascule sur un autre s'il est saturé.
  */
 const URL_GEMINI = 'https://generativelanguage.googleapis.com/v1beta/';
-const CLES_CARTE = ['prenom', 'nom', 'societe', 'poste', 'email', 'telephone', 'site', 'linkedin', 'adresse'];
+const CLES_CARTE = ['prenom', 'nom', 'societe', 'poste', 'email', 'telephone', 'fixe', 'standard', 'site', 'linkedin', 'adresse'];
 const CLE_CACHE = 'kipin.modeles';
 const CLE_MEMO = 'kipin.modele';
 const CLE_NIVEAUX = 'kipin.niveaux';
@@ -16,7 +16,9 @@ const PROMPT = [
   "- N'invente jamais rien. Si une information n'est pas sur la carte, laisse le champ vide.",
   '- prenom et nom séparés, avec majuscule initiale (pas tout en capitales).',
   "- societe : le nom de l'entreprise ou de la marque.",
-  "- telephone : un seul numéro, le mobile en priorité, écrit tel qu'imprimé.",
+  "- Numéros écrits tels qu'imprimés, un par champ : telephone = le mobile (en France 06 / 07, +33 6 / +33 7, ou marqué M., Mob., Portable) ;",
+  "  fixe = la ligne directe fixe (marquée T., Tél., Ligne directe, ou un fixe non marqué) ; standard = le numéro marqué Standard, Accueil, Switchboard ou Main.",
+  "  S'il n'y a qu'un fixe non marqué, mets-le dans fixe. Un fax ne va dans aucun champ.",
   '- site : le domaine sans https:// (ex. maison-exemple.fr).',
   "- linkedin : l'adresse complète du profil seulement si elle est imprimée sur la carte.",
   '- adresse : sur une seule ligne.',
@@ -180,6 +182,10 @@ function nettoyer(lu) {
   c.email = c.email.toLowerCase().replace(/\s/g, '');
   c.site = c.site.replace(/^https?:\/\//i, '').replace(/\/$/, '');
   if (c.linkedin && !/^https?:\/\//i.test(c.linkedin)) c.linkedin = 'https://' + c.linkedin;
+  // Garde-fou : un 06 / 07 français est un mobile, un autre numéro rangé en mobile passe en fixe.
+  const mobile = n => /^0[67]/.test(String(n).replace(/[^\d+]/g, '').replace(/^\+33|^0033/, '0'));
+  if (c.telephone && !mobile(c.telephone) && /^(\+33|0033|0)/.test(c.telephone.replace(/[^\d+]/g, '')) && !c.fixe) { c.fixe = c.telephone; c.telephone = ''; }
+  if (c.fixe && mobile(c.fixe) && !c.telephone) { c.telephone = c.fixe; c.fixe = ''; }
   const incertains = ((lu && lu.champsIncertains) || []).filter(k => CLES_CARTE.indexOf(k) >= 0);
   return { champs: c, incertains };
 }

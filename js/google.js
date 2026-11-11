@@ -1,9 +1,11 @@
 /**
  * KIPIN — google.js
- * Connexion Google par redirection (pas de fenêtre pop-up : fonctionne aussi
- * quand Kipin est ajouté à l'écran d'accueil de l'iPhone) et appels aux API Google.
- * Le jeton d'accès vit 1 heure ; Kipin le renouvelle sans rien demander tant que
- * la session Google du navigateur est ouverte.
+ * Connexion Google par la fenêtre officielle de Google (comme Hours) et appels aux API Google.
+ *
+ * - Le jeton d'accès vit 1 heure. Il est gardé dans le navigateur pour rouvrir Kipin sans rien redemander.
+ * - L'email du compte est retenu : au retour, un seul appui suffit (la fenêtre Google s'ouvre et se referme seule).
+ * - Quand le jeton expire pendant une action, l'action n'échoue pas : elle se met en pause,
+ *   Kipin affiche « Continuer », puis l'action reprend là où elle en était (rien n'est perdu).
  */
 import { CONFIG } from './config.js';
 
@@ -17,85 +19,94 @@ export const SCOPES = [
 
 const CLE_JETON = 'kipin.jeton';
 const CLE_EMAIL = 'kipin.email';
-const CLE_ETAT = 'kipin.oauthEtat';
-const CLE_SILENCIEUX = 'kipin.essaiSilencieux';
+const MARGE_MS = 2 * 60 * 1000;
+const ATTENTE_SCRIPT_MS = 10000;
 
-/** Erreur levée quand il faut se (re)connecter. */
+/** Erreur levée quand la personne annule la reconnexion. */
 export class ErreurSession extends Error {
-  constructor(message) { super(message || 'Ta session Google a expiré.'); this.name = 'ErreurSession'; }
+  constructor(message) { super(message || 'Ta connexion Google a expiré.'); this.name = 'ErreurSession'; }
 }
 
-function lire(cle, stockage) {
-  try { return JSON.parse((stockage || localStorage).getItem(cle)); } catch (e) { return null; }
+function lire(cle) {
+  try { return JSON.parse(localStorage.getItem(cle)); } catch (e) { return null; }
 }
-function ecrire(cle, valeur, stockage) {
+function ecrire(cle, valeur) {
   try {
-    if (valeur === null) (stockage || localStorage).removeItem(cle);
-    else (stockage || localStorage).setItem(cle, JSON.stringify(valeur));
+    if (valeur === null) localStorage.removeItem(cle);
+    else localStorage.setItem(cle, JSON.stringify(valeur));
   } catch (e) { /* stockage indisponible (navigation privée) */ }
 }
 
-export function urlRetour() {
-  return location.origin + location.pathname;
+/* ---------- Fenêtre de connexion Google ---------- */
+let client = null;
+let enAttente = null;
+
+function attendreScriptGoogle() {
+  return new Promise((ok, ko) => {
+    const debut = Date.now();
+    (function verifier() {
+      if (window.google && google.accounts && google.accounts.oauth2) return ok();
+      if (Date.now() - debut > ATTENTE_SCRIPT_MS) return ko(new Error('Le module de connexion Google ne se charge pas. Vérifie ta connexion internet.'));
+      setTimeout(verifier, 100);
+    })();
+  });
 }
 
-/** Envoie vers l'écran de connexion Google. silencieux = sans rien afficher si déjà connecté. */
-export function seConnecter(silencieux) {
-  const etat = Math.random().toString(36).slice(2) + Date.now().toString(36);
-  ecrire(CLE_ETAT, etat, sessionStorage);
-  if (silencieux) ecrire(CLE_SILENCIEUX, Date.now(), sessionStorage);
-  const p = new URLSearchParams({
+function creerClient() {
+  client = google.accounts.oauth2.initTokenClient({
     client_id: CONFIG.CLIENT_ID,
-    redirect_uri: urlRetour(),
-    response_type: 'token',
     scope: SCOPES.join(' '),
-    include_granted_scopes: 'true',
-    state: etat,
-    prompt: silencieux ? 'none' : 'select_account'
+    include_granted_scopes: true,
+    callback: (rep) => {
+      const attente = enAttente; enAttente = null;
+      if (!attente) return;
+      if (rep.error) {
+        attente.ko(new Error(rep.error === 'access_denied' ? 'Connexion annulée.' : 'Connexion Google impossible (' + (rep.error_description || rep.error) + ').'));
+        return;
+      }
+      const scopes = String(rep.scope || '').split(' ');
+      ecrire(CLE_JETON, {
+        valeur: rep.access_token,
+        expire: Date.now() + Number(rep.expires_in || 3600) * 1000 - MARGE_MS,
+        scopes
+      });
+      attente.ok(SCOPES.filter(s => s.startsWith('https://') && scopes.indexOf(s) < 0));
+    },
+    error_callback: (err) => {
+      const attente = enAttente; enAttente = null;
+      if (!attente) return;
+      const t = err && err.type;
+      attente.ko(new Error(t === 'popup_closed' ? 'Fenêtre Google fermée avant la fin. Réessaie.'
+        : t === 'popup_failed_to_open' ? 'Le téléphone a bloqué la fenêtre Google. Réessaie en touchant le bouton.'
+        : 'Connexion Google impossible. Réessaie.'));
+    }
   });
-  const email = lire(CLE_EMAIL);
-  if (email) p.set('login_hint', email);
-  location.assign('https://accounts.google.com/o/oauth2/v2/auth?' + p.toString());
+}
+
+function demanderJeton(options) {
+  if (!client) creerClient();
+  return new Promise((ok, ko) => {
+    enAttente = { ok, ko };
+    client.requestAccessToken(options);
+  });
+}
+
+/** Le module Google est prêt : la fenêtre peut s'ouvrir sans délai au moment de l'appui (sinon Safari la bloque). */
+export function prechargerConnexion() {
+  attendreScriptGoogle().then(() => { if (!client) creerClient(); }, () => {});
 }
 
 /**
- * À appeler au démarrage. Lit la réponse de Google dans l'adresse (#access_token=…).
- * Renvoie { statut: 'connecte' | 'a-connecter' | 'redirige', erreur?, scopesManquants? }.
+ * Ouvre la fenêtre Google. À appeler directement depuis un appui.
+ * Compte retenu : il est proposé d'office (la fenêtre s'ouvre et se referme seule).
+ * autreCompte : Google laisse choisir le compte.
+ * Renvoie la liste des autorisations refusées (vide si tout est coché).
  */
-export function demarrerSession() {
-  const fragment = new URLSearchParams(location.hash.slice(1));
-  if (fragment.has('access_token') || fragment.has('error')) {
-    history.replaceState(null, '', urlRetour() + location.search);
-    const etatAttendu = lire(CLE_ETAT, sessionStorage);
-    ecrire(CLE_ETAT, null, sessionStorage);
-    if (fragment.get('state') !== etatAttendu) {
-      return { statut: 'a-connecter', erreur: 'La connexion a été interrompue. Réessaie.' };
-    }
-    if (fragment.has('error')) {
-      const e = fragment.get('error');
-      if (e === 'access_denied') return { statut: 'a-connecter', erreur: 'Connexion annulée.' };
-      return { statut: 'a-connecter' }; // login_required, interaction_required… : connexion manuelle
-    }
-    const jeton = {
-      valeur: fragment.get('access_token'),
-      expire: Date.now() + (Number(fragment.get('expires_in') || 3600) - 120) * 1000,
-      scopes: (fragment.get('scope') || '').split(' ')
-    };
-    ecrire(CLE_JETON, jeton);
-    ecrire(CLE_SILENCIEUX, null, sessionStorage);
-    const manquants = SCOPES.filter(s => s.startsWith('https://') && jeton.scopes.indexOf(s) < 0);
-    return { statut: 'connecte', scopesManquants: manquants };
-  }
-
-  if (jetonValide()) return { statut: 'connecte', scopesManquants: [] };
-
-  // Déjà venu ici : on renouvelle sans rien demander (une seule tentative par minute).
-  const dernierEssai = lire(CLE_SILENCIEUX, sessionStorage);
-  if (lire(CLE_EMAIL) && (!dernierEssai || Date.now() - dernierEssai > 60000)) {
-    seConnecter(true);
-    return { statut: 'redirige' };
-  }
-  return { statut: 'a-connecter' };
+export async function connecter(autreCompte) {
+  if (!(window.google && google.accounts && google.accounts.oauth2)) await attendreScriptGoogle();
+  const email = lire(CLE_EMAIL);
+  const options = autreCompte || !email ? { prompt: 'select_account' } : { prompt: '', login_hint: email };
+  return demanderJeton(options);
 }
 
 export function jetonValide() {
@@ -103,10 +114,11 @@ export function jetonValide() {
   return !!(j && j.valeur && j.expire > Date.now());
 }
 
-/** Minutes restantes avant expiration du jeton. */
-export function minutesRestantes() {
+/** Autorisations refusées lors de la dernière connexion. */
+export function scopesManquants() {
   const j = lire(CLE_JETON);
-  return j ? Math.floor((j.expire - Date.now()) / 60000) : 0;
+  if (!j || !j.scopes) return [];
+  return SCOPES.filter(s => s.startsWith('https://') && j.scopes.indexOf(s) < 0);
 }
 
 export function memoriserEmail(email) { ecrire(CLE_EMAIL, email); }
@@ -118,21 +130,54 @@ export async function seDeconnecter() {
   ecrire(CLE_EMAIL, null);
   if (j && j.valeur) {
     try {
-      await fetch('https://oauth2.googleapis.com/revoke?token=' + encodeURIComponent(j.valeur), {
-        method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' }
-      });
+      if (window.google && google.accounts && google.accounts.oauth2) google.accounts.oauth2.revoke(j.valeur, () => {});
     } catch (e) { /* hors ligne : le jeton expirera seul */ }
   }
 }
 
+/* ---------- Reprise après expiration ---------- */
+let reprise = null;
+let surReprise = function () {};
+
+/** L'interface s'abonne ici : fn(true) = afficher « Continuer », fn(false) = le retirer. */
+export function quandRepriseDemandee(fn) { surReprise = fn; }
+
+export function repriseEnCours() { return !!reprise; }
+
+function attendreReprise() {
+  if (!reprise) {
+    let ok, ko;
+    const promesse = new Promise((a, b) => { ok = a; ko = b; });
+    reprise = { promesse, ok, ko };
+    surReprise(true);
+  }
+  return reprise.promesse;
+}
+
+/** Appui sur « Continuer » : nouveau jeton, puis les actions en pause repartent. En cas d'échec, « Continuer » reste. */
+export async function reprendre() {
+  await connecter(false);
+  const r = reprise; reprise = null;
+  surReprise(false);
+  if (r) r.ok();
+}
+
+/** Appui sur « Annuler » : les actions en pause s'arrêtent sans rien écrire. */
+export function abandonnerReprise() {
+  const r = reprise; reprise = null;
+  surReprise(false);
+  if (r) r.ko(new ErreurSession('Action annulée : la connexion Google a expiré.'));
+}
+
+/* ---------- Appels aux API ---------- */
 /**
  * Appel à une API Google avec le jeton de l'utilisateur.
  * options : { methode, corps (objet JSON, Blob ou texte), type, brut (renvoie la Response) }
  */
-export async function api(url, options) {
+export async function api(url, options, dejaRepris) {
   options = options || {};
+  if (!jetonValide()) await attendreReprise();
   const j = lire(CLE_JETON);
-  if (!j || !j.valeur || j.expire <= Date.now()) throw new ErreurSession();
 
   const entetes = { Authorization: 'Bearer ' + j.valeur };
   let corps = options.corps;
@@ -150,11 +195,14 @@ export async function api(url, options) {
     } catch (e) {
       // Coupure réseau passagère : une seconde tentative avant d'abandonner.
       if (essai === 0) { await new Promise(r => setTimeout(r, 1500)); continue; }
-      throw new Error('Google ' + service(url) + ' ne répond pas (' + (e.message || e.name) + '). Réessaie dans un instant.');
+      const err = new Error('Google ' + service(url) + ' ne répond pas (' + (e.message || e.name) + '). Réessaie dans un instant.');
+      err.reseau = true;
+      throw err;
     }
   }
   if (rep.status === 401) {
     ecrire(CLE_JETON, null);
+    if (!dejaRepris) return api(url, options, true);
     throw new ErreurSession();
   }
   if (options.brut) return rep;

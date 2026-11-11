@@ -239,6 +239,12 @@
   /* ===== Pied collant (photo, vérification) ===== */
   .pied { position: sticky; bottom: 0; margin-top: auto; padding: 1rem 1.25rem calc(1rem + env(safe-area-inset-bottom)); background: var(--carte); border-top: 1px solid var(--trait); display: flex; flex-direction: column; gap: 0.5rem; }
   .espace { height: 1rem; }
+  .attente-bandeau { border: 1px solid var(--trait); border-radius: 1rem; background: var(--carte); }
+  .attente-carte { display: flex; gap: 0.85rem; align-items: flex-start; }
+  .attente-carte img { width: 6.5rem; aspect-ratio: 1.6; object-fit: cover; border-radius: 0.5rem; flex-shrink: 0; }
+  .pied-onglets { bottom: calc(4.4rem + env(safe-area-inset-bottom)); padding-bottom: 0.85rem; }
+  .pied-onglets .note { text-align: center; font-size: 0.8rem; }
+  .date-lettres { font-size: 0.9rem; font-weight: 600; color: var(--bleu, inherit); margin-top: -0.35rem; }
 
   /* ===== Barre d'onglets ===== */
   .onglets {
@@ -254,6 +260,10 @@
   /* ===== Chargement et messages ===== */
   .occupe { position: fixed; inset: 0; background: var(--voile); display: flex; align-items: center; justify-content: center; z-index: 10; }
   .occupe-boite { background: var(--carte); color: var(--encre); border-radius: 1.1rem; padding: 1.3rem 1.4rem; display: flex; flex-direction: column; gap: 0.85rem; font-weight: 700; width: 19rem; max-width: 86%; }
+  .reprise { z-index: 12; }
+  .reprise .occupe-boite { font-weight: 400; width: 21rem; }
+  .reprise .note { font-weight: 400; }
+  .erreur-txt { color: var(--rouge, #C0392B); }
   .occupe-ligne { display: flex; align-items: center; gap: 0.85rem; }
   .roue { width: 22px; height: 22px; border-radius: 50%; border: 3px solid var(--bleu-fond); border-top-color: var(--bleu); animation: tourne 0.8s linear infinite; flex-shrink: 0; }
   @keyframes tourne { to { transform: rotate(360deg); } }
