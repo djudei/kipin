@@ -327,13 +327,13 @@ import * as AT from './attente.js';
           '<ol class="etapes-cle">' +
             etape(1, 'Ouvre Google AI Studio', 'Le bouton ci-dessous ouvre la bonne page. Connecte-toi avec ton compte Gmail si on te le demande, et accepte les conditions la première fois.') +
             etape(2, 'Touche « Create API key »', 'C\'est le bouton bleu (« Créer une clé API » si la page est en français). Si on te demande un projet, garde celui proposé.') +
-            etape(3, 'Copie la clé', 'Elle commence par <code>AIza</code>. Touche l\'icône de copie à côté. Si Google parle de facturation, ignore : ce n\'est pas nécessaire.') +
+            etape(3, 'Copie la clé', 'Une fenêtre « Détails de la clé API » s\'ouvre : touche « Copier la clé ». Elle commence par <code>AQ.</code> (ou <code>AIza</code> pour une ancienne clé). Si Google parle de facturation, ignore : ce n\'est pas nécessaire.') +
             etape(4, 'Reviens ici et colle-la', 'Kipin la vérifie tout de suite.') +
           '</ol>' +
           '<a class="btn sec" href="https://aistudio.google.com/app/apikey" target="_blank" rel="noopener">Ouvrir Google AI Studio' + ICO.externe + '</a>' +
         '</section>' +
         '<section class="carte pile">' +
-          '<label class="champ">Ta clé Gemini<input id="in-cle" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" placeholder="AIza…" enterkeyhint="done" value="' + esc(etatCle.valeur) + '"></label>' +
+          '<label class="champ">Ta clé Gemini<input id="in-cle" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" placeholder="AQ.…" enterkeyhint="done" value="' + esc(etatCle.valeur) + '"></label>' +
           (navigator.clipboard && navigator.clipboard.readText ? '<button class="btn sec" data-a="coller-cle">Coller ma clé</button>' : '') +
           '<div id="cle-statut">' + statut + '</div>' +
         '</section>' +
@@ -349,9 +349,11 @@ import * as AT from './attente.js';
     clearTimeout(minuteurCle);
     etatCle.valeur = cle;
     if (!cle) { etatCle.statut = ''; majStatutCle(); return; }
-    if (!/^AIza[\w-]{30,}$/.test(cle)) {
+    // Deux formats existent : les clés récentes d'AI Studio (« AQ.… », depuis mai 2026) et les anciennes (« AIza… »).
+    // Kipin ne vérifie ici que la forme ; c'est Google qui dit si la clé est valable.
+    if (!/^[\w.\-]{30,}$/.test(cle)) {
       etatCle.statut = cle.length > 10 ? 'ko' : '';
-      etatCle.message = 'Ça ne ressemble pas à une clé Gemini : elle commence par AIza et fait 39 caractères. Recopie-la en entier.';
+      etatCle.message = /\s/.test(cle) ? 'La clé contient un espace : recopie-la sans espace.' : 'Clé incomplète : recopie-la en entier avec le bouton de copie d\'AI Studio.';
       majStatutCle();
       return;
     }
