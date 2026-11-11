@@ -271,6 +271,33 @@ import * as AT from './attente.js';
 
   function masquer(cle) { return cle ? cle.slice(0, 4) + '••••••••' + cle.slice(-3) : ''; }
 
+  /* ================= Un souci ? ================= */
+  /**
+   * Email pré-rempli vers l'adresse d'aide : ce qui s'est passé (à compléter par la personne),
+   * plus le contexte utile pour comprendre le problème. Jamais la clé, jamais les contacts.
+   */
+  function appareil() {
+    var n = navigator.userAgent;
+    return /iPhone|iPad/.test(n) ? 'iPhone / iPad' : /Android/.test(n) ? 'Android' : /Mac/.test(n) ? 'Mac' : /Windows/.test(n) ? 'PC Windows' : 'Autre';
+  }
+  function lienSouci(erreur) {
+    var ecranAccueil = (window.matchMedia && matchMedia('(display-mode: standalone)').matches) || navigator.standalone;
+    var corps = [
+      'Bonjour,', '', 'Ce qui s\'est passé :', '', '', '',
+      '— Informations pour t\'aider (ne pas effacer) —',
+      'Version de Kipin : ' + CONFIG.VERSION,
+      'Appareil : ' + appareil() + (ecranAccueil ? ', ouvert depuis l\'écran d\'accueil' : ', ouvert dans le navigateur'),
+      'Écran : ' + (S.ecran || '?'),
+      'Clé Gemini : ' + (S.cleGemini ? 'oui' : 'non'),
+      'Contacts : ' + S.contacts.length
+    ];
+    if (erreur) corps.push('Message affiché : ' + erreur);
+    return 'mailto:' + CONFIG.EMAIL_AIDE + '?subject=' + encodeURIComponent('Kipin : un souci') + '&body=' + encodeURIComponent(corps.join('\n'));
+  }
+  function boutonSouci(erreur, libelle) {
+    return '<a class="lien" href="' + esc(lienSouci(erreur)) + '">' + ICO.mail + '<span>' + esc(libelle || 'Signaler le problème') + '</span></a>';
+  }
+
   /* ================= Écran : connexion ================= */
   RENDUS.connexion = function () {
     var point = function (ico, texte) { return '<li>' + ico + '<span>' + texte + '</span></li>'; };
@@ -286,7 +313,7 @@ import * as AT from './attente.js';
           '</ul>' +
         '</div>' +
         '<div class="pile">' +
-          (S.erreurConnexion ? '<div class="alerte" role="alert"><span class="ico">' + ICO.alerte + '</span><span>' + esc(S.erreurConnexion) + '</span></div>' : '') +
+          (S.erreurConnexion ? '<div class="alerte" role="alert"><span class="ico">' + ICO.alerte + '</span><div class="pile" style="gap:0.4rem"><span>' + esc(S.erreurConnexion) + '</span>' + boutonSouci(S.erreurConnexion) + '</div></div>' : '') +
           (G.emailMemorise()
             ? '<button class="btn google" data-a="connexion">Continuer avec ' + esc(G.emailMemorise()) + '</button>' +
               '<button class="lien" style="align-self:center" data-a="connexion" data-v="autre">Utiliser un autre compte</button>'
@@ -606,7 +633,8 @@ import * as AT from './attente.js';
           ? '<div class="alerte" role="alert"><span class="ico">' + ICO.alerte + '</span><div class="pile" style="gap:0.5rem"><span><strong>Lecture impossible.</strong> ' + esc(S.erreurLecture) + '</span>' +
             (S.attenteId ? '<span>La photo est gardée dans « Cartes à lire » : tu pourras la reprendre plus tard.</span>' : '') +
             '<div class="ligne-ajout"><button class="btn sec mini" data-a="lire">Réessayer</button><button class="btn sec mini" data-a="manuel">Saisir à la main</button>' +
-            (S.attenteId ? '<button class="btn sec mini" data-a="onglet" data-v="contacts">Plus tard</button>' : '') + '</div></div></div>'
+            (S.attenteId ? '<button class="btn sec mini" data-a="onglet" data-v="contacts">Plus tard</button>' : '') + '</div>' +
+            boutonSouci(S.erreurLecture) + '</div></div>'
           : '') +
         bandeauQR() +
         '<h2 class="eyebrow">Recto</h2>' +
@@ -1001,6 +1029,12 @@ import * as AT from './attente.js';
           '<h2 class="eyebrow">Compte</h2>' +
           '<p class="texte">Connecté avec <strong>' + esc(S.email) + '</strong></p>' +
           '<button class="btn sec" data-a="deconnexion">Se déconnecter</button>' +
+        '</section>' +
+        '<section class="carte pile" style="gap:0.5rem">' +
+          '<h2 class="eyebrow">Un souci ?</h2>' +
+          '<p class="note">Un bug, une carte mal lue, une idée : écris-moi. L\'email est pré-rempli avec ta version de Kipin et ton type de téléphone, sans tes contacts ni ta clé.</p>' +
+          '<a class="btn sec" href="' + esc(lienSouci()) + '">' + ICO.mail + 'Écrire à ' + esc(CONFIG.EMAIL_AIDE) + '</a>' +
+          '<p class="note" style="text-align:center">Kipin · version du ' + esc(CONFIG.VERSION) + '</p>' +
         '</section>' +
       '</div>' +
       '<div class="espace"></div>' +

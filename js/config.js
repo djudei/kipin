@@ -8,6 +8,9 @@
 export const CONFIG = {
   CLIENT_ID: '648065562846-mdlt3snn9al3bi9o4glvpvofoivbs67l.apps.googleusercontent.com',
 
+  VERSION: '11/11/2026',
+  EMAIL_AIDE: 'julienm.app@gmail.com', // adresse du lien « Un souci ? »
+
   NOM_SHEET: 'Kipin – Contacts',
   NOM_DOSSIER: 'Kipin – Photos',
   TAGS_DEFAUT: ['Client', 'Prospect', 'Partenaire', 'Fournisseur', 'Presse'],
