@@ -301,16 +301,18 @@ import * as AT from './attente.js';
   /* ================= Écran : connexion ================= */
   RENDUS.connexion = function () {
     if (S.avantGoogle) { renduAvantGoogle(); return; }
-    var point = function (ico, texte) { return '<li>' + ico + '<span>' + texte + '</span></li>'; };
+    var point = function (titre, texte) { return '<li><strong>' + titre + '</strong> : ' + texte + '</li>'; };
     $('e-connexion').innerHTML =
       '<div class="connexion">' +
-        '<div class="pile" style="gap:1.75rem">' +
-          '<div class="marque"><span class="logo">Kipin</span><span class="sous">keep in touch</span></div>' +
-          '<h1 class="accroche">Une carte de visite, un rappel.<br><span>Plus aucun contact oublié.</span></h1>' +
+        '<div class="pile" style="gap:0">' +
+          '<span class="sur-titre">Keep in touch</span>' +
+          '<span class="logo-grand">Kipin</span>' +
+          '<span class="filet" aria-hidden="true"></span>' +
+          '<h1 class="accroche">Une carte de visite, un rappel. <em>Plus aucun contact oublié.</em></h1>' +
           '<ul class="points">' +
-            point(ICO.photo, '<strong>Photographie une carte</strong> : Gemini remplit la fiche pour toi.') +
-            point(ICO.rappels, '<strong>Relance au bon moment</strong> : un rappel dans ton Google Agenda.') +
-            point(ICO.contacts, '<strong>Tes contacts chez toi</strong> : tout est rangé dans ton propre Google Drive.') +
+            point('Photographier une carte', 'Gemini remplit la fiche.') +
+            point('Relance au bon moment', 'un rappel dans Google Agenda.') +
+            point('Contacts chez soi', 'tout est rangé dans son propre Google Drive.') +
           '</ul>' +
         '</div>' +
         '<div class="pile">' +
@@ -319,8 +321,8 @@ import * as AT from './attente.js';
             ? '<button class="btn google" data-a="connexion">Continuer avec ' + esc(G.emailMemorise()) + '</button>' +
               '<button class="lien" style="align-self:center" data-a="connexion" data-v="autre">Utiliser un autre compte</button>'
             : '<button class="btn google" data-a="avant-google">Se connecter avec Google</button>') +
-          '<p class="note" style="text-align:center">Avec ton adresse Gmail. Kipin ne voit que les fichiers qu\'il crée dans ton Drive.</p>' +
-          '<a class="lien" style="align-self:center;font-size:0.82rem" href="confidentialite.html" target="_blank" rel="noopener">Confidentialité et données</a>' +
+          '<p class="note" style="text-align:center">Avec une adresse Gmail. Kipin ne voit que les fichiers qu\'il crée dans le Drive.</p>' +
+          '<a class="lien" style="align-self:center" href="confidentialite.html" target="_blank" rel="noopener">Confidentialité et données</a>' +
         '</div>' +
       '</div>';
   };
@@ -337,18 +339,18 @@ import * as AT from './attente.js';
       '<div class="contenu pile">' +
         '<p class="texte">Kipin est un <strong>projet gratuit, pas encore validé par Google</strong>. Google va donc afficher un <strong>avertissement</strong> : c\'est normal, et ça n\'arrive qu\'à la première connexion.</p>' +
         '<ol class="etapes-cle">' +
-          etape(1, 'Choisis ton compte Gmail', '<span>Celui où Kipin rangera tes contacts.</span>') +
-          etape(2, 'Touche « Paramètres avancés »', '<span>En bas de l\'écran « Google n\'a pas validé cette application ». Ne touche pas le bouton « Retour à la sécurité ».</span>' +
+          etape(1, 'Choisir son compte Gmail', '<span>Celui où Kipin rangera les contacts.</span>') +
+          etape(2, 'Toucher « Paramètres avancés »', '<span>En bas de l\'écran « Google n\'a pas validé cette application ». Ne pas toucher le bouton « Retour à la sécurité ».</span>' +
             '<div class="maquette" aria-hidden="true">' +
               '<span class="maquette-titre">Google n\'a pas validé cette application</span>' +
               '<span class="maquette-texte">L\'application demande l\'accès à des informations sensibles de votre compte Google…</span>' +
               '<span class="maquette-ligne"><span class="maquette-lien vise">Paramètres avancés</span><span class="maquette-btn">Retour à la sécurité</span></span>' +
             '</div>') +
-          etape(3, 'Touche « Accéder à djudei.github.io (non sécurisé) »', '<span>Le lien apparaît juste en dessous. « djudei.github.io » est l\'adresse de Kipin.</span>' +
+          etape(3, 'Toucher « Accéder à djudei.github.io (non sécurisé) »', '<span>Le lien apparaît juste en dessous. « djudei.github.io » est l\'adresse de Kipin.</span>' +
             '<div class="maquette" aria-hidden="true"><span class="maquette-lien vise">Accéder à djudei.github.io (non sécurisé)</span></div>') +
-          etape(4, 'Coche toutes les cases, puis « Continuer »', '<span>Google Drive (seulement les fichiers créés par Kipin) et Google Agenda (tes relances). Sans ces cases, Kipin ne pourra pas ranger tes contacts ni créer tes rappels.</span>') +
+          etape(4, 'Cocher toutes les cases, puis « Continuer »', '<span>Google Drive (seulement les fichiers créés par Kipin) et Google Agenda (les relances). Sans ces cases, Kipin ne peut ni ranger les contacts ni créer les rappels.</span>') +
         '</ol>' +
-        '<div class="astuce"><span class="ico-bleu">' + ICO.info + '</span><span><strong>Ce que Kipin ne fait pas :</strong> il ne lit pas tes emails, ne voit pas tes autres fichiers et n\'envoie rien à personne. Tout reste dans ton compte Google.</span></div>' +
+        '<div class="astuce"><span class="ico-bleu">' + ICO.info + '</span><span><strong>Ce que Kipin ne fait pas :</strong> il ne lit pas les emails, ne voit pas les autres fichiers et n\'envoie rien à personne. Tout reste dans le compte Google.</span></div>' +
       '</div>' +
       '<div class="pied"><button class="btn pri" data-a="connexion">J\'ai compris, continuer vers Google</button></div>';
   }
@@ -366,36 +368,36 @@ import * as AT from './attente.js';
     var depuisApp = S.configure;
     $('e-cle').innerHTML =
       (depuisApp
-        ? '<header class="barre"><button class="icone" data-a="retour" data-v="onglet" aria-label="Retour">' + ICO.retour + '</button><h1 class="t2">Ta clé Gemini</h1></header>'
+        ? '<header class="barre"><button class="icone" data-a="retour" data-v="onglet" aria-label="Retour">' + ICO.retour + '</button><h1 class="t2">Clé Gemini</h1></header>'
         : '<header class="barre barre-titre"><div class="marque"><span class="logo">Kipin</span><span class="sous">keep in touch</span></div></header>') +
       '<div class="contenu pile">' +
         '<div class="pile" style="gap:0.5rem">' +
           (depuisApp ? '' : '<h1 class="t1">Dernière étape</h1>') +
-          '<p class="texte">C\'est <strong>Gemini, l\'IA de Google</strong>, qui lit tes cartes. Pour ça, il te faut une <strong>clé</strong> : un code personnel et gratuit qui te donne ton propre accès. Ça prend 2 minutes, une seule fois.</p>' +
+          '<p class="texte">C\'est <strong>Gemini, l\'IA de Google</strong>, qui lit les cartes. Il faut pour cela une <strong>clé</strong> : un code personnel et gratuit qui donne un accès propre. Ça prend 2 minutes, une seule fois.</p>' +
         '</div>' +
         '<ul class="rassure">' +
           '<li>' + ICO.ok + '<span><strong>Gratuit</strong>, aucune carte bancaire demandée.</span></li>' +
           '<li>' + ICO.ok + '<span><strong>Environ 20 cartes par jour.</strong> Au-delà, les photos attendent dans « Cartes à lire ».</span></li>' +
-          '<li>' + ICO.ok + '<span><strong>Tes photos restent privées</strong> : en Europe, Google ne s\'en sert pas pour entraîner Gemini.</span></li>' +
-          '<li>' + ICO.ok + '<span><strong>Ta clé reste chez toi</strong>, dans ton propre Google Sheet.</span></li>' +
+          '<li>' + ICO.ok + '<span><strong>Les photos restent privées</strong> : en Europe, Google ne s\'en sert pas pour entraîner Gemini.</span></li>' +
+          '<li>' + ICO.ok + '<span><strong>La clé reste chez soi</strong>, dans son propre Google Sheet.</span></li>' +
         '</ul>' +
         '<section class="carte pile">' +
-          '<h2 class="eyebrow">Créer ta clé</h2>' +
+          '<h2 class="eyebrow">Créer la clé</h2>' +
           '<ol class="etapes-cle">' +
-            etape(1, 'Ouvre Google AI Studio', 'Le bouton ci-dessous ouvre la bonne page. Connecte-toi avec ton compte Gmail si on te le demande, et accepte les conditions la première fois.') +
-            etape(2, 'Touche « Create API key »', 'C\'est le bouton bleu (« Créer une clé API » si la page est en français). Si on te demande un projet, garde celui proposé.') +
-            etape(3, 'Copie la clé', 'Une fenêtre « Détails de la clé API » s\'ouvre : touche « Copier la clé ». Elle commence par <code>AQ.</code> (ou <code>AIza</code> pour une ancienne clé). Si Google parle de facturation, ignore : ce n\'est pas nécessaire.') +
-            etape(4, 'Reviens ici et colle-la', 'Kipin la vérifie tout de suite.') +
+            etape(1, 'Ouvrir Google AI Studio', 'Le bouton ci-dessous ouvre la bonne page. Se connecter avec son compte Gmail si besoin, et accepter les conditions la première fois.') +
+            etape(2, 'Toucher « Create API key »', 'C\'est le bouton bleu (« Créer une clé API » si la page est en français). Si un projet est demandé, garder celui proposé.') +
+            etape(3, 'Copier la clé', 'Une fenêtre « Détails de la clé API » s\'ouvre : toucher « Copier la clé ». Elle commence par <code>AQ.</code> (ou <code>AIza</code> pour une ancienne clé). Si Google parle de facturation, ignorer : ce n\'est pas nécessaire.') +
+            etape(4, 'Revenir ici et la coller', 'Kipin la vérifie tout de suite.') +
           '</ol>' +
           '<a class="btn sec" href="https://aistudio.google.com/app/apikey" target="_blank" rel="noopener">Ouvrir Google AI Studio' + ICO.externe + '</a>' +
         '</section>' +
         '<section class="carte pile">' +
-          '<label class="champ">Ta clé Gemini<input id="in-cle" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" placeholder="AQ.…" enterkeyhint="done" value="' + esc(etatCle.valeur) + '"></label>' +
-          (navigator.clipboard && navigator.clipboard.readText ? '<button class="btn sec" data-a="coller-cle">Coller ma clé</button>' : '') +
+          '<label class="champ">Clé Gemini<input id="in-cle" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" placeholder="AQ.…" enterkeyhint="done" value="' + esc(etatCle.valeur) + '"></label>' +
+          (navigator.clipboard && navigator.clipboard.readText ? '<button class="btn sec" data-a="coller-cle">Coller la clé</button>' : '') +
           '<div id="cle-statut">' + statut + '</div>' +
         '</section>' +
         (depuisApp ? '' : '<button class="lien" style="align-self:center" data-a="passer-cle">Pas maintenant</button>' +
-          '<p class="note" style="text-align:center;margin-top:-0.5rem">Sans clé, tu peux déjà saisir un contact à la main, lire un QR code ou importer un fichier .vcf.</p>') +
+          '<p class="note" style="text-align:center;margin-top:-0.5rem">Sans clé, il est déjà possible de saisir un contact à la main, de lire un QR code ou d\'importer un fichier .vcf.</p>') +
       '</div>' +
       '<div class="pied"><button class="btn pri" id="btn-cle" data-a="enregistrer-cle"' + (etatCle.statut === 'ok' ? '' : ' disabled') + '>' + (depuisApp ? 'Enregistrer la clé' : 'Commencer') + '</button></div>';
   };
@@ -410,7 +412,7 @@ import * as AT from './attente.js';
     // Kipin ne vérifie ici que la forme ; c'est Google qui dit si la clé est valable.
     if (!/^[\w.\-]{30,}$/.test(cle)) {
       etatCle.statut = cle.length > 10 ? 'ko' : '';
-      etatCle.message = /\s/.test(cle) ? 'La clé contient un espace : recopie-la sans espace.' : 'Clé incomplète : recopie-la en entier avec le bouton de copie d\'AI Studio.';
+      etatCle.message = /\s/.test(cle) ? 'La clé contient un espace : la recopier sans espace.' : 'Clé incomplète : la recopier en entier avec le bouton de copie d\'AI Studio.';
       majStatutCle();
       return;
     }
@@ -428,7 +430,7 @@ import * as AT from './attente.js';
   }
   function statutCleHtml() {
     return etatCle.statut === 'test' ? '<p class="cle-statut" role="status"><span class="roue petite" aria-hidden="true"></span>Vérification de la clé…</p>'
-      : etatCle.statut === 'ok' ? '<p class="cle-statut ok" role="status">' + ICO.ok + 'Clé OK, Kipin peut lire tes cartes.</p>'
+      : etatCle.statut === 'ok' ? '<p class="cle-statut ok" role="status">' + ICO.ok + 'Clé OK, Kipin peut lire les cartes.</p>'
       : etatCle.statut === 'ko' ? '<p class="cle-statut ko" role="alert">' + ICO.alerte + esc(etatCle.message) + '</p>'
       : '';
   }
@@ -516,7 +518,7 @@ import * as AT from './attente.js';
       '<div class="contenu pile">' +
         (S.attente.length
           ? '<button class="ligne attente-bandeau" data-a="voir-attente"><span class="avatar retard" aria-hidden="true">' + S.attente.length + '</span>' +
-            '<span class="ligne-txt"><b>' + (S.attente.length > 1 ? S.attente.length + ' cartes à lire' : '1 carte à lire') + '</b><span>Photographiées mais pas encore lues. Touche pour les reprendre.</span></span></button>'
+            '<span class="ligne-txt"><b>' + (S.attente.length > 1 ? S.attente.length + ' cartes à lire' : '1 carte à lire') + '</b><span>Photographiées mais pas encore lues, à reprendre ici.</span></span></button>'
           : '') +
         '<button class="scan" data-a="nouveau-scan">' +
           '<span class="scan-ico">' + ICO.photo + '</span>' +
@@ -543,7 +545,7 @@ import * as AT from './attente.js';
   function renderListeContacts() {
     var zone = $('liste-contacts');
     if (!zone) return;
-    if (!S.contacts.length) { zone.innerHTML = vide('Aucun contact pour l\'instant. Scanne ta première carte.'); return; }
+    if (!S.contacts.length) { zone.innerHTML = vide('Aucun contact pour l\'instant. Il suffit de scanner une première carte.'); return; }
     var q = normTxt(S.recherche);
     var liste = S.contacts.filter(function (c) {
       if (S.filtre !== 'tous' && statutDe(c) !== S.filtre) return false;
@@ -661,37 +663,38 @@ import * as AT from './attente.js';
       '<div class="contenu pile">' +
         (S.erreurLecture
           ? '<div class="alerte" role="alert"><span class="ico">' + ICO.alerte + '</span><div class="pile" style="gap:0.5rem"><span><strong>Lecture impossible.</strong> ' + esc(S.erreurLecture) + '</span>' +
-            (S.attenteId ? '<span>La photo est gardée dans « Cartes à lire » : tu pourras la reprendre plus tard.</span>' : '') +
+            (S.attenteId ? '<span>La photo est gardée dans « Cartes à lire », à reprendre plus tard.</span>' : '') +
             '<div class="ligne-ajout"><button class="btn sec mini" data-a="lire">Réessayer</button><button class="btn sec mini" data-a="manuel">Saisir à la main</button>' +
             (S.attenteId ? '<button class="btn sec mini" data-a="onglet" data-v="contacts">Plus tard</button>' : '') + '</div>' +
             boutonSouci(S.erreurLecture) + '</div></div>'
           : '') +
         bandeauQR() +
-        '<h2 class="eyebrow">Recto</h2>' +
         (r
-          ? '<div class="apercu"><img src="' + r.url + '" alt="Recto de la carte"></div>' + choixPhoto('recto', true)
-          : choixPhoto('recto', false)) +
-        '<h2 class="eyebrow">Verso <em>(facultatif)</em></h2>' +
+          ? '<div class="apercu"><img src="' + r.url + '" alt="Recto de la carte"></div>' +
+            '<div class="liens-photo"><label class="lien" for="in-recto-photo">' + ICO.photo + 'Reprendre</label><label class="lien" for="in-recto-album">' + ICO.album + 'Album</label></div>'
+          : '<label class="viseur" for="in-recto-photo"><span class="viseur-cadre" aria-hidden="true"></span><span class="viseur-txt">Placer la carte dans le cadre</span></label>' +
+            '<div class="declencheur-zone"><label class="declencheur" for="in-recto-photo" aria-label="Prendre la photo"><span></span></label><span class="declencheur-txt">Prendre la photo</span></div>' +
+            '<div class="liens-photo"><label class="lien" for="in-recto-album">Depuis l\'album</label></div>') +
         (v
-          ? '<div class="apercu"><img src="' + v.url + '" alt="Verso de la carte"><button class="pastille gauche" data-a="retirer-verso">Retirer</button></div>' + choixPhoto('verso', true)
-          : choixPhoto('verso', false)) +
-        '<div class="astuce"><span class="ico-bleu">' + ICO.info + '</span><span><strong>Recule un peu et zoome (×2 à ×3)</strong> : la carte doit remplir presque toute la photo et être bien nette. Trop près, le téléphone ne fait pas la mise au point. Carte à plat, sans reflet.</span></div>' +
-        '<section class="carte pile" style="gap:0.6rem">' +
-          '<h2 class="eyebrow">Ou importer un contact</h2>' +
-          '<div class="ligne-ajout">' +
-            (IM.carnetDisponible() ? '<button class="btn sec" style="flex:1" data-a="importer-carnet">' + ICO.contacts + 'Carnet d\'adresses</button>' : '') +
-            '<label class="btn sec" style="flex:1" for="in-vcf">' + ICO.fichier + 'Fichier de contact (.vcf)</label>' +
-          '</div>' +
-          '<p class="note">Pour une carte de visite électronique ou un contact reçu par message.' +
-            (estIOS() ? ' Depuis l\'app Contacts de l\'iPhone : ouvre la fiche, Partager le contact, Enregistrer dans Fichiers, puis choisis le fichier ici.' : '') +
-            ' Une carte avec un QR code de contact se lit aussi directement en photo.</p>' +
-        '</section>' +
-        (S.erreurLecture ? '' : '<button class="lien" data-a="manuel">Saisir le contact à la main</button>') +
+          ? '<h2 class="eyebrow">Verso</h2><div class="apercu"><img src="' + v.url + '" alt="Verso de la carte"><button class="pastille gauche" data-a="retirer-verso">Retirer</button></div>' +
+            '<div class="liens-photo"><label class="lien" for="in-verso-photo">' + ICO.photo + 'Reprendre</label><label class="lien" for="in-verso-album">' + ICO.album + 'Album</label></div>'
+          : (S.versoOuvert
+            ? '<h2 class="eyebrow">Verso</h2><div class="liens-photo"><label class="lien" for="in-verso-photo">' + ICO.photo + 'Photo du verso</label><label class="lien" for="in-verso-album">' + ICO.album + 'Verso depuis l\'album</label></div>'
+            : '<div class="liens-photo"><button class="lien doux" data-a="ouvrir-verso">+ Ajouter le verso</button></div>')) +
+        '<p class="note conseil">Reculer un peu et zoomer (×2 à ×3) : la carte doit remplir presque toute la photo, à plat et sans reflet.</p>' +
+        '<div class="imports">' +
+          (IM.carnetDisponible() ? '<button class="lien" data-a="importer-carnet">Carnet d\'adresses</button><span aria-hidden="true">·</span>' : '') +
+          '<label class="lien" for="in-vcf">Fichier .vcf</label>' +
+          (S.erreurLecture ? '' : '<span aria-hidden="true">·</span><button class="lien" data-a="manuel">Saisir à la main</button>') +
+        '</div>' +
+        '<p class="note" style="text-align:center">Un QR code de contact sur la carte se lit aussi directement en photo.' +
+          (estIOS() ? ' Pour un contact de l\'iPhone : Contacts, Partager le contact, Enregistrer dans Fichiers, puis « Fichier .vcf ».' : '') + '</p>' +
       '</div>' +
-      (S.cleGemini
-        ? '<div class="pied"><button class="btn pri" data-a="lire"' + (r ? '' : ' disabled') + '>Lire la carte</button></div>'
-        : '<div class="pied"><button class="btn pri" data-a="ajouter-cle"' + (r ? '' : ' disabled') + '>Ajouter ma clé pour lire la carte</button>' +
-          (r ? '<button class="btn sec" data-a="garder-carte">Garder la photo pour plus tard</button>' : '') + '</div>') +
+      (!r ? ''
+        : S.cleGemini
+        ? '<div class="pied"><button class="btn pri" data-a="lire">Lire la carte</button></div>'
+        : '<div class="pied"><button class="btn pri" data-a="ajouter-cle">Ajouter une clé pour lire la carte</button>' +
+          '<button class="btn sec" data-a="garder-carte">Garder la photo pour plus tard</button></div>') +
       // Deux champs par face : « capture » ouvre directement l'appareil photo (indispensable sur Android,
       // dont le sélecteur récent ne propose plus l'appareil photo), l'autre ouvre l'album.
       '<input type="file" accept="image/*" capture="environment" id="in-recto-photo" class="cache" tabindex="-1">' +
@@ -717,7 +720,7 @@ import * as AT from './attente.js';
         '<button class="btn pri mini" data-a="utiliser-qr">Utiliser ce contact</button></div></div>';
     }
     return '<div class="astuce"><span class="ico-bleu">' + ICO.info + '</span><div class="pile" style="gap:0.4rem"><span><strong>QR code détecté</strong> : il mène à une carte en ligne. ' +
-      'Ouvre-la, enregistre le contact (fichier .vcf), puis importe-le ci-dessous.</span>' +
+      'L\'ouvrir, enregistrer le contact (fichier .vcf), puis l\'importer ci-dessous.</span>' +
       '<a class="lien" href="' + esc(q.url) + '" target="_blank" rel="noopener">Ouvrir la carte en ligne' + ICO.externe + '</a></div></div>';
   }
 
@@ -770,7 +773,7 @@ import * as AT from './attente.js';
     };
     img.onerror = function () {
       URL.revokeObjectURL(url);
-      toast("Impossible d'ouvrir cette image. Essaie avec une autre photo.", true);
+      toast("Impossible d'ouvrir cette image. Essayer avec une autre photo.", true);
     };
     img.src = url;
   }
@@ -852,14 +855,14 @@ import * as AT from './attente.js';
 
     $('e-verif').innerHTML =
       '<header class="barre"><button class="icone" data-a="retour-verif" aria-label="Retour">' + ICO.retour + '</button>' +
-        '<h1 class="t2">' + (S.edition ? 'Modifier le contact' : 'Vérifie et complète') + '</h1></header>' +
+        '<h1 class="t2">' + (S.edition ? 'Modifier le contact' : 'Vérifier et compléter') + '</h1></header>' +
       '<div class="contenu pile">' +
         (doublon ? bandeauDoublon(doublon) : '') +
         (S.source && !S.edition ? '<div class="bandeau-ok">' + ICO.ok + '<span><strong>' +
           ({ carnet: 'Contact importé du carnet d\'adresses.', fichier: 'Contact importé du fichier.', qr: 'Contact lu depuis le QR code.' }[S.source] || 'Contact importé.') +
-          '</strong> Vérifie et complète avant d\'enregistrer.</span></div>' :
+          '</strong> À vérifier et compléter avant d\'enregistrer.</span></div>' :
          S.edition || S.saisieManuelle ? '' : '<div class="bandeau-ok">' + ICO.ok + '<span><strong>Carte lue.</strong> ' +
-          (nbDoutes ? nbDoutes + (nbDoutes > 1 ? ' champs à vérifier, signalés' : ' champ à vérifier, signalé') + ' en orange.' : 'Vérifie les champs avant d\'enregistrer.') +
+          (nbDoutes ? nbDoutes + (nbDoutes > 1 ? ' champs à vérifier, signalés' : ' champ à vérifier, signalé') + ' en orange.' : 'Vérifier les champs avant d\'enregistrer.') +
           '</span></div>') +
         '<section class="carte pile">' +
           '<h2 class="eyebrow">Contact</h2>' +
@@ -890,12 +893,12 @@ import * as AT from './attente.js';
           '<span class="date-lettres" id="date-lettres">' + esc(f.dateRelance ? dateLongue(f.dateRelance) : '') + '</span>' +
           '<div class="puces">' + raccourcis + '</div>' +
           '<label class="case"><input type="checkbox" data-f="agenda"' + (f.agenda ? ' checked' : '') + '><span>Événement Google Agenda<small>Notification sur le téléphone le jour J</small></span></label>' +
-          '<label class="case"><input type="checkbox" data-f="recap"' + (f.recap ? ' checked' : '') + '><span>Récap du lundi<small>Dans le rendez-vous « relances de la semaine » de ton Agenda</small></span></label>' +
+          '<label class="case"><input type="checkbox" data-f="recap"' + (f.recap ? ' checked' : '') + '><span>Récap du lundi<small>Dans le rendez-vous « relances de la semaine » de l\'Agenda</small></span></label>' +
           '<div class="pile" style="gap:0.5rem;border-top:1px solid var(--trait);padding-top:0.85rem">' +
             '<label class="champ">Inviter à la relance (facultatif)' +
               '<input data-f="invites" type="text" inputmode="email" autocapitalize="off" autocorrect="off" placeholder="adresse@exemple.fr" value="' + esc(f.invites || '') + '"></label>' +
             carnet +
-            '<p class="note">La personne est ajoutée comme invitée à l\'événement : Google Agenda lui envoie l\'invitation, puis les changements de date. Plusieurs adresses : sépare-les par une virgule.</p>' +
+            '<p class="note">La personne est ajoutée comme invitée à l\'événement : Google Agenda lui envoie l\'invitation, puis les changements de date. Plusieurs adresses : les séparer par une virgule.</p>' +
           '</div>') +
         '</section>' +
       '</div>' +
@@ -1032,11 +1035,11 @@ import * as AT from './attente.js';
         '</section>' +
         '<section class="carte pile">' +
           '<h2 class="eyebrow">Récap du lundi</h2>' +
-          '<label class="case"><input type="checkbox" data-r="recapActif"' + (r.recapActif ? ' checked' : '') + '><span>Rendez-vous « relances de la semaine »<small>Chaque lundi à 8 h 45 dans ton Agenda, juste avant les relances du jour, avec uniquement les relances de la semaine et celles à rattraper.</small></span></label>' +
+          '<label class="case"><input type="checkbox" data-r="recapActif"' + (r.recapActif ? ' checked' : '') + '><span>Rendez-vous « relances de la semaine »<small>Chaque lundi à 8 h 45 dans l\'Agenda, juste avant les relances du jour, avec uniquement les relances de la semaine et celles à rattraper.</small></span></label>' +
         '</section>' +
         '<section class="carte pile" style="gap:0.4rem">' +
           '<h2 class="eyebrow">Emails d\'invitation</h2>' +
-          '<p class="note">Proposés en un geste quand tu invites quelqu\'un à une relance. Les adresses saisies dans une fiche s\'ajoutent ici toutes seules.</p>' +
+          '<p class="note">Proposés en un geste pour inviter quelqu\'un à une relance. Les adresses saisies dans une fiche s\'ajoutent ici toutes seules.</p>' +
           (carnet || '<p class="note">Aucune adresse pour l\'instant.</p>') +
           '<div class="ligne-ajout" style="padding-top:0.4rem"><input id="in-carnet" inputmode="email" autocapitalize="off" autocorrect="off" placeholder="adresse@exemple.fr" enterkeyhint="done" aria-label="Nouvelle adresse"><button class="btn pri mini" data-a="ajout-carnet">Ajouter</button></div>' +
         '</section>' +
@@ -1052,8 +1055,8 @@ import * as AT from './attente.js';
             ? '<div class="reglage"><span>Clé Gemini<br><span class="note">' + esc(masquer(S.cleGemini)) + '</span></span><span class="badge ok">Active</span></div>' +
               '<div class="ligne-ajout"><input id="in-nouvelle-cle" placeholder="Coller une nouvelle clé" autocomplete="off" autocapitalize="off" spellcheck="false" aria-label="Nouvelle clé Gemini"><button class="btn sec mini" data-a="changer-cle">Changer</button></div>'
             : '<div class="reglage"><span>Clé Gemini<br><span class="note">Sans clé, Kipin ne lit pas les photos de cartes.</span></span><span class="badge">Aucune</span></div>' +
-              '<button class="btn pri" data-a="ajouter-cle">Ajouter ma clé Gemini</button>') +
-          (S.sheetUrl ? '<a class="lien large" style="border-top:1px solid var(--trait);padding-top:0.6rem" href="' + esc(S.sheetUrl) + '" target="_blank" rel="noopener">Ouvrir mon Google Sheet' + ICO.externe + '</a>' : '') +
+              '<button class="btn pri" data-a="ajouter-cle">Ajouter une clé Gemini</button>') +
+          (S.sheetUrl ? '<a class="lien large" style="border-top:1px solid var(--trait);padding-top:0.6rem" href="' + esc(S.sheetUrl) + '" target="_blank" rel="noopener">Ouvrir le Google Sheet' + ICO.externe + '</a>' : '') +
         '</section>' +
         '<section class="carte pile">' +
           '<h2 class="eyebrow">Compte</h2>' +
@@ -1062,7 +1065,7 @@ import * as AT from './attente.js';
         '</section>' +
         '<section class="carte pile" style="gap:0.5rem">' +
           '<h2 class="eyebrow">Un souci ?</h2>' +
-          '<p class="note">Un bug, une carte mal lue, une idée : écris-moi. Le message est pré-rempli avec ta version de Kipin et ton type de téléphone, sans tes contacts ni ta clé.</p>' +
+          '<p class="note">Un bug, une carte mal lue, une idée : un message suffit. Il est pré-rempli avec la version de Kipin et le type de téléphone, sans les contacts ni la clé.</p>' +
           '<a class="btn sec" href="' + esc(lienSouci()) + '">' + ICO.mail + 'Envoyer un message</a>' +
           '<p class="note" style="text-align:center">Kipin · version du ' + esc(CONFIG.VERSION) + '</p>' +
         '</section>' +
@@ -1104,29 +1107,29 @@ import * as AT from './attente.js';
     'abandonner-reprise': function () { G.abandonnerReprise(); },
     'enregistrer-cle': function () {
       var cle = ($('in-cle').value || '').trim();
-      if (!cle) { toast('Colle ta clé Gemini pour commencer.', true); return; }
+      if (!cle) { toast('Coller la clé Gemini pour commencer.', true); return; }
       var depuisApp = S.configure;
       appel(function () { return IA.testerCle(cle).then(function () { return D.enregistrerCle(cle); }); }, 'Enregistrement de la clé…', function () {
         S.cleGemini = cle;
         S.configure = true;
         etatCle = { valeur: '', statut: '', message: '' };
-        if (S.images.recto) { montrer('capture', 'replace'); toast('Clé enregistrée. Tu peux lire la carte.'); return; }
+        if (S.images.recto) { montrer('capture', 'replace'); toast('Clé enregistrée. La carte peut être lue.'); return; }
         aller(depuisApp ? S.onglet : 'contacts', 'replace');
         majRecap();
-        toast(depuisApp ? 'Clé enregistrée.' : 'Kipin est prêt. Scanne ta première carte.');
+        toast(depuisApp ? 'Clé enregistrée.' : 'Kipin est prêt pour une première carte.');
       });
     },
     'coller-cle': function () {
       navigator.clipboard.readText().then(function (t) {
         verifierCle(String(t || '').trim());
-      }, function () { toast('Le téléphone n\'a pas autorisé le collage. Touche le champ et colle la clé à la main.', true); });
+      }, function () { toast('Le téléphone n\'a pas autorisé le collage. Toucher le champ et coller la clé à la main.', true); });
     },
     'passer-cle': function () {
       appel(function () { return D.passerCle(); }, 'Un instant…', function () {
         S.configure = true;
         aller('contacts', 'replace');
         majRecap();
-        toast('Tu pourras ajouter ta clé dans Réglages, ou au moment de lire une carte.');
+        toast('La clé pourra être ajoutée dans Réglages, ou au moment de lire une carte.');
       });
     },
     'ajouter-cle': function () { etatCle = { valeur: '', statut: '', message: '' }; montrer('cle'); },
@@ -1144,7 +1147,7 @@ import * as AT from './attente.js';
 
     'voir-attente': function () { aller('attente'); },
     'garder-carte': function () {
-      AT.garder(S.images, 'En attente de ta clé Gemini.', S.attenteId).then(function () {
+      AT.garder(S.images, 'En attente d\'une clé Gemini.', S.attenteId).then(function () {
         majAttente(); aller('contacts', 'replace'); toast('Photo gardée dans « Cartes à lire ».');
       }, function (e) { toast('Impossible de garder la photo : ' + messageErreur(e), true); });
     },
@@ -1163,6 +1166,7 @@ import * as AT from './attente.js';
     },
     'nouveau-scan': function () {
       S.attenteId = null;
+      S.versoOuvert = false;
       S.qr = null;
       S.source = '';
       S.images = { recto: null, verso: null };
@@ -1170,7 +1174,8 @@ import * as AT from './attente.js';
       S.erreurLecture = '';
       aller('capture');
     },
-    'retirer-verso': function () { S.images.verso = null; RENDUS.capture(); },
+    'retirer-verso': function () { S.images.verso = null; S.versoOuvert = false; RENDUS.capture(); },
+    'ouvrir-verso': function () { S.versoOuvert = true; RENDUS.capture(); },
     'importer-carnet': function () {
       IM.choisirDansCarnet().then(function (champs) {
         if (champs) ouvrirImport(champs, 'carnet');
@@ -1244,7 +1249,7 @@ import * as AT from './attente.js';
         S.source = '';
         S.doublonVu = false;
         montrer('verif');
-        if (res.photoErreur) toast('Carte lue, mais la photo n\'a pas pu être rangée dans ton Drive : ' + res.photoErreur, true);
+        if (res.photoErreur) toast('Carte lue, mais la photo n\'a pas pu être rangée dans le Drive : ' + res.photoErreur, true);
       }, {
         annulable: true,
         apresAnnulation: function (res) {
@@ -1261,7 +1266,7 @@ import * as AT from './attente.js';
     'annuler-attente': function () {
       if (appelEnCours) appelEnCours.annule = true;
       libre();
-      toast('Lecture annulée. Tu peux reprendre la photo ou réessayer.');
+      toast('Lecture annulée. La photo peut être reprise, ou la lecture relancée.');
     },
     'voir-doublon': function (v) {
       S.edition = false;
@@ -1313,7 +1318,7 @@ import * as AT from './attente.js';
     'enregistrer': function () {
       lireForm();
       var f = S.form;
-      if (!f.prenom && !f.nom && !f.societe && !f.email) { toast('Renseigne au moins un nom, une société ou un email.', true); return; }
+      if (!f.prenom && !f.nom && !f.societe && !f.email) { toast('Renseigner au moins un nom, une société ou un email.', true); return; }
       if (!S.doublonVu && trouverDoublon(f)) {
         RENDUS.verif();
         window.scrollTo(0, 0);
@@ -1361,7 +1366,7 @@ import * as AT from './attente.js';
       if (!c || statutDe(c) === v) return;
       if (v === 'À relancer' && !c.dateRelance) {
         S.reporter = true; RENDUS.fiche();
-        toast('Choisis la date de la relance, puis valide.');
+        toast('Choisir la date de la relance, puis valider.');
         return;
       }
       appel(function () { return D.changerStatut(c.id, v, S.reglages); }, 'Mise à jour…', function (nc) {
@@ -1374,7 +1379,7 @@ import * as AT from './attente.js';
     'report-rapide': function (v) { $('in-report').value = plusJours(auj(), v); $('report-lettres').textContent = dateLongue($('in-report').value); },
     'valider-report': function () {
       var d = $('in-report').value;
-      if (!d) { toast('Choisis une date.', true); return; }
+      if (!d) { toast('Choisir une date.', true); return; }
       var id = S.courantId;
       appel(function () { return D.reporterRelance(id, d, S.reglages); }, 'Report de la relance…', function (nc) {
         remplacer(nc); S.reporter = false; RENDUS.fiche(); renderOnglets(); majRecap();
@@ -1442,7 +1447,7 @@ import * as AT from './attente.js';
     },
     'changer-cle': function () {
       var cle = ($('in-nouvelle-cle').value || '').trim();
-      if (!cle) { toast('Colle la nouvelle clé.', true); return; }
+      if (!cle) { toast('Coller la nouvelle clé.', true); return; }
       appel(function () { return IA.testerCle(cle).then(function () { return D.enregistrerCle(cle); }); }, 'Vérification de la clé…', function () {
         S.cleGemini = cle; RENDUS.reglages(); toast('Nouvelle clé enregistrée.');
       });

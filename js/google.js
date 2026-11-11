@@ -45,7 +45,7 @@ function attendreScriptGoogle() {
     const debut = Date.now();
     (function verifier() {
       if (window.google && google.accounts && google.accounts.oauth2) return ok();
-      if (Date.now() - debut > ATTENTE_SCRIPT_MS) return ko(new Error('Le module de connexion Google ne se charge pas. Vérifie ta connexion internet.'));
+      if (Date.now() - debut > ATTENTE_SCRIPT_MS) return ko(new Error('Le module de connexion Google ne se charge pas. Vérifier la connexion internet.'));
       setTimeout(verifier, 100);
     })();
   });
@@ -75,9 +75,9 @@ function creerClient() {
       const attente = enAttente; enAttente = null;
       if (!attente) return;
       const t = err && err.type;
-      attente.ko(new Error(t === 'popup_closed' ? 'Fenêtre Google fermée avant la fin. Réessaie.'
-        : t === 'popup_failed_to_open' ? 'Le téléphone a bloqué la fenêtre Google. Réessaie en touchant le bouton.'
-        : 'Connexion Google impossible. Réessaie.'));
+      attente.ko(new Error(t === 'popup_closed' ? 'Fenêtre Google fermée avant la fin. Réessayer.'
+        : t === 'popup_failed_to_open' ? 'Le téléphone a bloqué la fenêtre Google. Réessayer en touchant le bouton.'
+        : 'Connexion Google impossible. Réessayer.'));
     }
   });
 }
@@ -194,7 +194,7 @@ export async function api(url, options, dejaRepris) {
     } catch (e) {
       // Coupure réseau passagère : une seconde tentative avant d'abandonner.
       if (essai === 0) { await new Promise(r => setTimeout(r, 1500)); continue; }
-      const err = new Error('Google ' + service(url) + ' ne répond pas (' + (e.message || e.name) + '). Réessaie dans un instant.');
+      const err = new Error('Google ' + service(url) + ' ne répond pas (' + (e.message || e.name) + '). Réessayer dans un instant.');
       err.reseau = true;
       throw err;
     }
@@ -228,14 +228,14 @@ function service(url) {
 
 function traduireErreur(statut, message, url) {
   if (statut === 403 && /insufficient|scope|permission/i.test(message)) {
-    if (url.indexOf('calendar') >= 0) return "Kipin n'a pas l'autorisation d'utiliser ton Agenda. Déconnecte-toi puis reconnecte-toi en cochant toutes les cases.";
-    if (url.indexOf('gmail') >= 0) return "Kipin n'a pas l'autorisation d'envoyer des emails. Déconnecte-toi puis reconnecte-toi en cochant toutes les cases.";
-    return "Autorisation Google manquante. Déconnecte-toi puis reconnecte-toi en cochant toutes les cases.";
+    if (url.indexOf('calendar') >= 0) return "Kipin n'a pas l'autorisation d'utiliser l'Agenda. Se déconnecter puis se reconnecter en cochant toutes les cases.";
+    if (url.indexOf('gmail') >= 0) return "Kipin n'a pas l'autorisation d'envoyer des emails. Se déconnecter puis se reconnecter en cochant toutes les cases.";
+    return "Autorisation Google manquante. Se déconnecter puis se reconnecter en cochant toutes les cases.";
   }
   if (statut === 403 && /has not been used|disabled/i.test(message)) {
     return "Une API Google n'est pas activée dans le projet Google Cloud de Kipin. (" + message.slice(0, 120) + ')';
   }
-  if (statut === 429) return 'Google limite les requêtes. Réessaie dans une minute.';
-  if (statut >= 500) return 'Google ne répond pas pour le moment. Réessaie dans un instant.';
+  if (statut === 429) return 'Google limite les requêtes. Réessayer dans une minute.';
+  if (statut >= 500) return 'Google ne répond pas pour le moment. Réessayer dans un instant.';
   return 'Erreur Google (' + statut + ') : ' + message;
 }

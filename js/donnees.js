@@ -233,7 +233,7 @@ function normaliser(c, reglages) {
   } else {
     p.dateRelance = /^\d{4}-\d{2}-\d{2}$/.test(String(c.dateRelance)) ? c.dateRelance : isoPlusJours(isoAuj(), reglages.delai);
   }
-  if (!p.prenom && !p.nom && !p.societe && !p.email) throw new Error('Renseigne au moins un nom, une société ou un email.');
+  if (!p.prenom && !p.nom && !p.societe && !p.email) throw new Error('Renseigner au moins un nom, une société ou un email.');
   return p;
 }
 
@@ -293,7 +293,7 @@ export async function changerStatut(id, statut, reglages) {
 }
 
 export async function reporterRelance(id, dateIso, reglages) {
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(String(dateIso))) throw new Error('Choisis une date de relance.');
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(String(dateIso))) throw new Error('Choisir une date de relance.');
   const ligne = await trouverLigne(id);
   const c = await lireLigne(ligne);
   c.dateRelance = dateIso;

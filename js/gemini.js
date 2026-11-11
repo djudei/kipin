@@ -73,7 +73,7 @@ function message(texte) {
 export async function testerCle(cle) {
   const rep = await requete(URL_GEMINI + 'models?pageSize=1', cle, null, 20000);
   if (rep.status === 0) throw new Error('Gemini injoignable depuis ce téléphone (' + rep.cause + ').');
-  if (rep.status !== 200) throw new Error("Cette clé est refusée par Gemini. Vérifie que tu l'as copiée en entier.");
+  if (rep.status !== 200) throw new Error("Cette clé est refusée par Gemini. Vérifier qu'elle a été copiée en entier.");
 }
 
 /** Modèles Flash disponibles pour la clé, du plus récent au moins récent (cache 6 h). */
@@ -98,7 +98,7 @@ async function modelesFlash(cle) {
 
 /** images = [{data: base64, mimeType}] → { champs, incertains } */
 export async function lireCarte(cle, images) {
-  if (!cle) throw new Error('Clé Gemini manquante : ajoute-la dans Réglages.');
+  if (!cle) throw new Error('Clé Gemini manquante : l\'ajouter dans Réglages.');
   const contenu = [{ role: 'user', parts: [{ text: PROMPT }].concat(images.map(i => ({ inlineData: { mimeType: i.mimeType || 'image/jpeg', data: i.data } }))) }];
   // Recopier une carte ne demande pas de « réflexion » : on prend le niveau le plus bas
   // que le modèle accepte (minimal, sinon low), sinon son réglage par défaut.
@@ -115,7 +115,7 @@ export async function lireCarte(cle, images) {
   let candidats = await modelesFlash(cle);
   if (memorise && candidats.indexOf(memorise) >= 0) candidats = [memorise].concat(candidats.filter(m => m !== memorise));
   candidats = candidats.slice(0, 4);
-  if (!candidats.length) throw new Error("Aucun modèle Gemini Flash n'est disponible pour ta clé.");
+  if (!candidats.length) throw new Error("Aucun modèle Gemini Flash n'est disponible pour cette clé.");
 
   const journal = [];
   let quotaPartout = true;
@@ -144,7 +144,7 @@ export async function lireCarte(cle, images) {
         break;
       }
       if (rep.status === 401 || (rep.status === 400 && /API key/i.test(texte))) {
-        throw new Error('Ta clé Gemini est refusée. Change-la dans Réglages.');
+        throw new Error('La clé Gemini est refusée. La changer dans Réglages.');
       }
       if (rep.status === 404 || rep.status === 403 || (rep.status === 400 && /model|not supported|not found|unsupported/i.test(texte))) {
         quotaPartout = false;
@@ -159,15 +159,15 @@ export async function lireCarte(cle, images) {
       throw new Error('Erreur Gemini (' + rep.status + ', ' + modele + ') : ' + message(texte));
     }
   }
-  if (quotaPartout) throw new Error('Quota gratuit Gemini atteint. Réessaie dans une minute, ou demain si la limite du jour est atteinte.');
+  if (quotaPartout) throw new Error('Quota gratuit Gemini atteint. Réessayer dans une minute, ou demain si la limite du jour est atteinte.');
   if (journal.every(j => j.indexOf('réseau') >= 0)) {
-    throw new Error('Gemini ne répond pas depuis ce téléphone (' + journal[journal.length - 1] + '). Vérifie qu\'aucun bloqueur de contenu ou VPN ne filtre Google, puis réessaie.');
+    throw new Error('Gemini ne répond pas depuis ce téléphone (' + journal[journal.length - 1] + '). Vérifier qu\'aucun bloqueur de contenu ou VPN ne filtre Google, puis réessayer.');
   }
-  throw new Error('Gemini est saturé ou injoignable en ce moment (' + journal.join(', ') + '). Réessaie dans une minute.');
+  throw new Error('Gemini est saturé ou injoignable en ce moment (' + journal.join(', ') + '). Réessayer dans une minute.');
 }
 
 function lireReponse(texte) {
-  const illisible = "Gemini n'a pas réussi à lire la carte. Reprends la photo, bien à plat et sans reflet.";
+  const illisible = "Gemini n'a pas réussi à lire la carte. Reprendre la photo, bien à plat et sans reflet.";
   const json = JSON.parse(texte);
   const parts = (json.candidates && json.candidates[0] && json.candidates[0].content && json.candidates[0].content.parts) || [];
   let txt = parts.filter(p => p.text && !p.thought).map(p => p.text).join('').trim();
