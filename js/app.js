@@ -1032,8 +1032,8 @@ import * as AT from './attente.js';
         '</section>' +
         '<section class="carte pile" style="gap:0.5rem">' +
           '<h2 class="eyebrow">Un souci ?</h2>' +
-          '<p class="note">Un bug, une carte mal lue, une idée : écris-moi. L\'email est pré-rempli avec ta version de Kipin et ton type de téléphone, sans tes contacts ni ta clé.</p>' +
-          '<a class="btn sec" href="' + esc(lienSouci()) + '">' + ICO.mail + 'Écrire à ' + esc(CONFIG.EMAIL_AIDE) + '</a>' +
+          '<p class="note">Un bug, une carte mal lue, une idée : écris-moi. Le message est pré-rempli avec ta version de Kipin et ton type de téléphone, sans tes contacts ni ta clé.</p>' +
+          '<a class="btn sec" href="' + esc(lienSouci()) + '">' + ICO.mail + 'Envoyer un message</a>' +
           '<p class="note" style="text-align:center">Kipin · version du ' + esc(CONFIG.VERSION) + '</p>' +
         '</section>' +
       '</div>' +
