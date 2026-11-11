@@ -185,6 +185,20 @@
   .ligne-edit .nom { flex: 1; font-weight: 600; overflow-wrap: anywhere; }
   .ligne-edit .compte { font-size: 0.76rem; color: var(--doux); font-weight: 500; }
   .note { margin: 0; font-size: 0.76rem; color: var(--doux); line-height: 1.45; }
+  .rassure { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 0.55rem; font-size: 0.88rem; line-height: 1.45; }
+  .rassure li { display: flex; gap: 0.6rem; align-items: flex-start; }
+  .rassure svg { color: var(--vert-encre, var(--bleu)); flex-shrink: 0; margin-top: 2px; }
+  .etapes-cle { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 0.85rem; }
+  .etape { display: flex; gap: 0.75rem; align-items: flex-start; }
+  .etape-n { flex-shrink: 0; width: 1.6rem; height: 1.6rem; border-radius: 50%; background: var(--bleu-fond); color: var(--bleu-encre); font-weight: 700; font-size: 0.85rem; display: flex; align-items: center; justify-content: center; }
+  .etape div { display: flex; flex-direction: column; gap: 0.15rem; font-size: 0.88rem; line-height: 1.45; }
+  .etape span { color: var(--doux); }
+  .etape code { font-size: 0.85em; background: var(--bleu-fond); color: var(--bleu-encre); padding: 0 0.25rem; border-radius: 0.25rem; }
+  .cle-statut { display: flex; gap: 0.5rem; align-items: flex-start; margin: 0; font-size: 0.86rem; font-weight: 600; }
+  .cle-statut svg { flex-shrink: 0; margin-top: 1px; }
+  .cle-statut.ok { color: var(--vert-encre, #1E7A46); }
+  .cle-statut.ko { color: var(--rouge, #C0392B); font-weight: 500; }
+  .roue.petite { width: 1rem; height: 1rem; border-width: 2px; flex-shrink: 0; }
   .etapes { margin: 0; padding-left: 1.25rem; font-size: 0.88rem; line-height: 1.6; }
   .astuce { display: flex; gap: 0.6rem; align-items: flex-start; background: var(--bleu-fond); color: var(--bleu-encre); border-radius: 0.9rem; padding: 0.85rem; font-size: 0.82rem; line-height: 1.45; }
   .astuce svg, .alerte svg, .bandeau-ok svg { flex-shrink: 0; margin-top: 1px; }

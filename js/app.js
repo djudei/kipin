@@ -257,7 +257,7 @@ import * as AT from './attente.js';
     S.sheetUrl = e.sheetUrl || '';
     S.cleGemini = e.cleGemini || '';
     S.email = e.email || '';
-    S.configure = !!S.cleGemini;
+    S.configure = !!S.cleGemini || !!e.sansCle;
   }
 
   /** Met à jour le rendez-vous « relances de la semaine » de l'Agenda, sans bloquer l'écran. */
@@ -296,29 +296,90 @@ import * as AT from './attente.js';
       '</div>';
   };
 
-  /* ================= Écran : clé Gemini (premier lancement) ================= */
+  /* ================= Écran : clé Gemini ================= */
+  // Premier lancement, ou depuis Réglages / l'écran photo quand aucune clé n'est encore enregistrée.
+  // La clé est vérifiée dès qu'elle est collée : « Commencer » ne s'active qu'avec une clé valide.
+  var etatCle = { valeur: '', statut: '', message: '' }; // statut : '' | 'test' | 'ok' | 'ko'
+
   RENDUS.cle = function () {
+    var etape = function (n, titre, texte) {
+      return '<li class="etape"><span class="etape-n" aria-hidden="true">' + n + '</span><div><b>' + titre + '</b><span>' + texte + '</span></div></li>';
+    };
+    var statut = statutCleHtml();
+    var depuisApp = S.configure;
     $('e-cle').innerHTML =
-      '<header class="barre barre-titre"><div class="marque"><span class="logo">Kipin</span><span class="sous">keep in touch</span></div></header>' +
+      (depuisApp
+        ? '<header class="barre"><button class="icone" data-a="retour" data-v="onglet" aria-label="Retour">' + ICO.retour + '</button><h1 class="t2">Ta clé Gemini</h1></header>'
+        : '<header class="barre barre-titre"><div class="marque"><span class="logo">Kipin</span><span class="sous">keep in touch</span></div></header>') +
       '<div class="contenu pile">' +
-        '<div class="carte pile">' +
-          '<h1 class="t1">Bienvenue</h1>' +
-          '<p class="texte">Ton Sheet <strong>« ' + esc(CONFIG.NOM_SHEET) + ' »</strong> est prêt dans ton Google Drive. Il reste une étape pour que Kipin sache lire les cartes.</p>' +
+        '<div class="pile" style="gap:0.5rem">' +
+          (depuisApp ? '' : '<h1 class="t1">Dernière étape</h1>') +
+          '<p class="texte">C\'est <strong>Gemini, l\'IA de Google</strong>, qui lit tes cartes. Pour ça, il te faut une <strong>clé</strong> : un code personnel et gratuit qui te donne ton propre accès. Ça prend 2 minutes, une seule fois.</p>' +
         '</div>' +
-        '<div class="carte pile">' +
-          '<h2 class="eyebrow">Ta clé Gemini gratuite</h2>' +
-          '<ol class="etapes">' +
-            '<li>Ouvre Google AI Studio avec ton compte Google.</li>' +
-            '<li>Touche « Create API key », puis copie la clé.</li>' +
-            '<li>Reviens ici et colle-la ci-dessous.</li>' +
+        '<ul class="rassure">' +
+          '<li>' + ICO.ok + '<span><strong>Gratuit</strong>, aucune carte bancaire demandée.</span></li>' +
+          '<li>' + ICO.ok + '<span><strong>Environ 20 cartes par jour.</strong> Au-delà, les photos attendent dans « Cartes à lire ».</span></li>' +
+          '<li>' + ICO.ok + '<span><strong>Tes photos restent privées</strong> : en Europe, Google ne s\'en sert pas pour entraîner Gemini.</span></li>' +
+          '<li>' + ICO.ok + '<span><strong>Ta clé reste chez toi</strong>, dans ton propre Google Sheet.</span></li>' +
+        '</ul>' +
+        '<section class="carte pile">' +
+          '<h2 class="eyebrow">Créer ta clé</h2>' +
+          '<ol class="etapes-cle">' +
+            etape(1, 'Ouvre Google AI Studio', 'Le bouton ci-dessous ouvre la bonne page. Connecte-toi avec ton compte Gmail si on te le demande, et accepte les conditions la première fois.') +
+            etape(2, 'Touche « Create API key »', 'C\'est le bouton bleu (« Créer une clé API » si la page est en français). Si on te demande un projet, garde celui proposé.') +
+            etape(3, 'Copie la clé', 'Elle commence par <code>AIza</code>. Touche l\'icône de copie à côté. Si Google parle de facturation, ignore : ce n\'est pas nécessaire.') +
+            etape(4, 'Reviens ici et colle-la', 'Kipin la vérifie tout de suite.') +
           '</ol>' +
-          '<a class="btn sec" href="https://aistudio.google.com/app/apikey" target="_blank" rel="noopener">Ouvrir Google AI Studio</a>' +
-          '<label class="champ">Clé Gemini<input id="in-cle" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" placeholder="AIza…" enterkeyhint="done"></label>' +
-          '<p class="note">Gratuit, sans carte bancaire : n\'active pas la facturation. Sur l\'offre gratuite, Google peut utiliser les images envoyées pour améliorer ses services.</p>' +
-        '</div>' +
+          '<a class="btn sec" href="https://aistudio.google.com/app/apikey" target="_blank" rel="noopener">Ouvrir Google AI Studio' + ICO.externe + '</a>' +
+        '</section>' +
+        '<section class="carte pile">' +
+          '<label class="champ">Ta clé Gemini<input id="in-cle" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" placeholder="AIza…" enterkeyhint="done" value="' + esc(etatCle.valeur) + '"></label>' +
+          (navigator.clipboard && navigator.clipboard.readText ? '<button class="btn sec" data-a="coller-cle">Coller ma clé</button>' : '') +
+          '<div id="cle-statut">' + statut + '</div>' +
+        '</section>' +
+        (depuisApp ? '' : '<button class="lien" style="align-self:center" data-a="passer-cle">Pas maintenant</button>' +
+          '<p class="note" style="text-align:center;margin-top:-0.5rem">Sans clé, tu peux déjà saisir un contact à la main, lire un QR code ou importer un fichier .vcf.</p>') +
       '</div>' +
-      '<div class="pied"><button class="btn pri" data-a="enregistrer-cle">Commencer</button></div>';
+      '<div class="pied"><button class="btn pri" id="btn-cle" data-a="enregistrer-cle"' + (etatCle.statut === 'ok' ? '' : ' disabled') + '>' + (depuisApp ? 'Enregistrer la clé' : 'Commencer') + '</button></div>';
   };
+
+  var minuteurCle = null;
+  /** Vérifie la clé saisie ; n'affiche le résultat que si elle n'a pas changé entre-temps. */
+  function verifierCle(cle) {
+    clearTimeout(minuteurCle);
+    etatCle.valeur = cle;
+    if (!cle) { etatCle.statut = ''; majStatutCle(); return; }
+    if (!/^AIza[\w-]{30,}$/.test(cle)) {
+      etatCle.statut = cle.length > 10 ? 'ko' : '';
+      etatCle.message = 'Ça ne ressemble pas à une clé Gemini : elle commence par AIza et fait 39 caractères. Recopie-la en entier.';
+      majStatutCle();
+      return;
+    }
+    etatCle.statut = 'test';
+    majStatutCle();
+    minuteurCle = setTimeout(function () {
+      IA.testerCle(cle).then(function () {
+        if (etatCle.valeur !== cle) return;
+        etatCle.statut = 'ok'; majStatutCle();
+      }, function (e) {
+        if (etatCle.valeur !== cle) return;
+        etatCle.statut = 'ko'; etatCle.message = messageErreur(e); majStatutCle();
+      });
+    }, 300);
+  }
+  function statutCleHtml() {
+    return etatCle.statut === 'test' ? '<p class="cle-statut" role="status"><span class="roue petite" aria-hidden="true"></span>Vérification de la clé…</p>'
+      : etatCle.statut === 'ok' ? '<p class="cle-statut ok" role="status">' + ICO.ok + 'Clé OK, Kipin peut lire tes cartes.</p>'
+      : etatCle.statut === 'ko' ? '<p class="cle-statut ko" role="alert">' + ICO.alerte + esc(etatCle.message) + '</p>'
+      : '';
+  }
+  /** Met à jour le message et le bouton sans redessiner le champ (le clavier reste ouvert). */
+  function majStatutCle() {
+    if (!$('cle-statut')) return;
+    $('cle-statut').innerHTML = statutCleHtml();
+    $('btn-cle').disabled = etatCle.statut !== 'ok';
+    if ($('in-cle').value.trim() !== etatCle.valeur) $('in-cle').value = etatCle.valeur;
+  }
 
   /* ================= Outils contacts ================= */
   function contact(id) {
@@ -567,7 +628,10 @@ import * as AT from './attente.js';
         '</section>' +
         (S.erreurLecture ? '' : '<button class="lien" data-a="manuel">Saisir le contact à la main</button>') +
       '</div>' +
-      '<div class="pied"><button class="btn pri" data-a="lire"' + (r ? '' : ' disabled') + '>Lire la carte</button></div>' +
+      (S.cleGemini
+        ? '<div class="pied"><button class="btn pri" data-a="lire"' + (r ? '' : ' disabled') + '>Lire la carte</button></div>'
+        : '<div class="pied"><button class="btn pri" data-a="ajouter-cle"' + (r ? '' : ' disabled') + '>Ajouter ma clé pour lire la carte</button>' +
+          (r ? '<button class="btn sec" data-a="garder-carte">Garder la photo pour plus tard</button>' : '') + '</div>') +
       // Deux champs par face : « capture » ouvre directement l'appareil photo (indispensable sur Android,
       // dont le sélecteur récent ne propose plus l'appareil photo), l'autre ouvre l'album.
       '<input type="file" accept="image/*" capture="environment" id="in-recto-photo" class="cache" tabindex="-1">' +
@@ -924,8 +988,11 @@ import * as AT from './attente.js';
         '</section>' +
         '<section class="carte pile">' +
           '<h2 class="eyebrow">Connexions</h2>' +
-          '<div class="reglage"><span>Clé Gemini<br><span class="note">' + esc(masquer(S.cleGemini)) + '</span></span><span class="badge ok">Active</span></div>' +
-          '<div class="ligne-ajout"><input id="in-nouvelle-cle" placeholder="Coller une nouvelle clé" autocomplete="off" autocapitalize="off" spellcheck="false" aria-label="Nouvelle clé Gemini"><button class="btn sec mini" data-a="changer-cle">Changer</button></div>' +
+          (S.cleGemini
+            ? '<div class="reglage"><span>Clé Gemini<br><span class="note">' + esc(masquer(S.cleGemini)) + '</span></span><span class="badge ok">Active</span></div>' +
+              '<div class="ligne-ajout"><input id="in-nouvelle-cle" placeholder="Coller une nouvelle clé" autocomplete="off" autocapitalize="off" spellcheck="false" aria-label="Nouvelle clé Gemini"><button class="btn sec mini" data-a="changer-cle">Changer</button></div>'
+            : '<div class="reglage"><span>Clé Gemini<br><span class="note">Sans clé, Kipin ne lit pas les photos de cartes.</span></span><span class="badge">Aucune</span></div>' +
+              '<button class="btn pri" data-a="ajouter-cle">Ajouter ma clé Gemini</button>') +
           (S.sheetUrl ? '<a class="lien large" style="border-top:1px solid var(--trait);padding-top:0.6rem" href="' + esc(S.sheetUrl) + '" target="_blank" rel="noopener">Ouvrir mon Google Sheet' + ICO.externe + '</a>' : '') +
         '</section>' +
         '<section class="carte pile">' +
@@ -969,14 +1036,31 @@ import * as AT from './attente.js';
     'enregistrer-cle': function () {
       var cle = ($('in-cle').value || '').trim();
       if (!cle) { toast('Colle ta clé Gemini pour commencer.', true); return; }
-      appel(function () { return IA.testerCle(cle).then(function () { return D.enregistrerCle(cle); }); }, 'Vérification de la clé…', function () {
+      var depuisApp = S.configure;
+      appel(function () { return IA.testerCle(cle).then(function () { return D.enregistrerCle(cle); }); }, 'Enregistrement de la clé…', function () {
         S.cleGemini = cle;
+        S.configure = true;
+        etatCle = { valeur: '', statut: '', message: '' };
+        if (S.images.recto) { montrer('capture', 'replace'); toast('Clé enregistrée. Tu peux lire la carte.'); return; }
+        aller(depuisApp ? S.onglet : 'contacts', 'replace');
+        majRecap();
+        toast(depuisApp ? 'Clé enregistrée.' : 'Kipin est prêt. Scanne ta première carte.');
+      });
+    },
+    'coller-cle': function () {
+      navigator.clipboard.readText().then(function (t) {
+        verifierCle(String(t || '').trim());
+      }, function () { toast('Le téléphone n\'a pas autorisé le collage. Touche le champ et colle la clé à la main.', true); });
+    },
+    'passer-cle': function () {
+      appel(function () { return D.passerCle(); }, 'Un instant…', function () {
         S.configure = true;
         aller('contacts', 'replace');
         majRecap();
-        toast('Kipin est prêt. Scanne ta première carte.');
+        toast('Tu pourras ajouter ta clé dans Réglages, ou au moment de lire une carte.');
       });
     },
+    'ajouter-cle': function () { etatCle = { valeur: '', statut: '', message: '' }; montrer('cle'); },
     'deconnexion': function () {
       appel(function () { return G.seDeconnecter(); }, 'Déconnexion…', function () {
         S.configure = false;
@@ -990,6 +1074,11 @@ import * as AT from './attente.js';
     'ouvrir': function (v) { S.courantId = v; aller('fiche'); },
 
     'voir-attente': function () { aller('attente'); },
+    'garder-carte': function () {
+      AT.garder(S.images, 'En attente de ta clé Gemini.', S.attenteId).then(function () {
+        majAttente(); aller('contacts', 'replace'); toast('Photo gardée dans « Cartes à lire ».');
+      }, function (e) { toast('Impossible de garder la photo : ' + messageErreur(e), true); });
+    },
     'lire-attente': function (v) {
       var a = S.attente.filter(function (x) { return x.id === v; })[0];
       if (!a) return;
@@ -997,7 +1086,7 @@ import * as AT from './attente.js';
       S.images = { recto: AT.versImage(a.recto), verso: AT.versImage(a.verso) };
       S.attenteId = a.id;
       montrer('capture', 'replace');
-      ACTIONS.lire();
+      if (S.cleGemini) ACTIONS.lire();
     },
     'suppr-attente': function (v) {
       AT.retirer(v).then(majAttente);
@@ -1333,6 +1422,7 @@ import * as AT from './attente.js';
   document.addEventListener('input', function (ev) {
     var t = ev.target;
     if (t.id === 'in-recherche') { S.recherche = t.value; renderListeContacts(); return; }
+    if (t.id === 'in-cle') { verifierCle(t.value.trim()); return; }
     // La date est aussi écrite en toutes lettres : pas de confusion 12/07 / 07/12, quel que soit le réglage du téléphone.
     if (t.id === 'in-report' && $('report-lettres')) { $('report-lettres').textContent = t.value ? dateLongue(t.value) : ''; return; }
     if (t.getAttribute && t.getAttribute('data-f') === 'dateRelance' && $('date-lettres')) { $('date-lettres').textContent = t.value ? dateLongue(t.value) : ''; return; }

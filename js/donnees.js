@@ -69,7 +69,8 @@ export async function charger() {
     tags: reglagesBrut.map(l => (l[0] || '').trim()).filter(Boolean),
     carnet: reglagesBrut.map(l => (l[1] || '').trim().toLowerCase()).filter(Boolean),
     reglages: lireReglages(),
-    cleGemini: E.config.gemini || ''
+    cleGemini: E.config.gemini || '',
+    sansCle: E.config.sansCle === '1'
   };
 }
 
@@ -179,6 +180,11 @@ export async function sauverReglages(r) {
 
 export async function enregistrerCle(cle) {
   await ecrireConfig('gemini', cle);
+}
+
+/** « Pas maintenant » : Kipin s'ouvre sans clé (saisie à la main, QR code, .vcf) ; la clé s'ajoute plus tard. */
+export async function passerCle() {
+  await ecrireConfig('sansCle', '1');
 }
 
 /* ================= Contacts ================= */
