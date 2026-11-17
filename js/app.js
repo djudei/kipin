@@ -75,7 +75,7 @@ import * as NOTE from './note.js';
     options = options || {};
     var jeton = { annule: false };
     appelEnCours = jeton;
-    occupe(message, !!options.annulable);
+    occupe(message, !!options.annulable, options);
     Promise.resolve().then(fn).then(function (v) {
       if (jeton.annule) { if (options.apresAnnulation) options.apresAnnulation(v); return; }
       libre(); if (ok) ok(v);
@@ -101,12 +101,21 @@ import * as NOTE from './note.js';
     $('reprise').hidden = !actif;
   });
 
-  var minuteurAnnuler = null;
-  function occupe(message, annulable) {
+  var minuteurAnnuler = null, minuteursTexte = [];
+  /** options.photo : image affichée avec un trait qui la balaie ; options.etapes : [[ms, texte], …] pour faire évoluer le message. */
+  function occupe(message, annulable, options) {
+    options = options || {};
     $('occupe-texte').textContent = message || 'Un instant…';
     $('occupe-aide').hidden = true;
     $('occupe-annuler').hidden = true;
     clearTimeout(minuteurAnnuler);
+    minuteursTexte.forEach(clearTimeout);
+    minuteursTexte = (options.etapes || []).map(function (e) {
+      return setTimeout(function () { $('occupe-texte').textContent = e[1]; }, e[0]);
+    });
+    $('occupe-scan').hidden = !options.photo;
+    $('occupe').classList.toggle('avec-scan', !!options.photo);
+    if (options.photo) $('occupe-photo').src = options.photo;
     if (annulable) {
       minuteurAnnuler = setTimeout(function () {
         $('occupe-aide').hidden = false;
@@ -117,6 +126,8 @@ import * as NOTE from './note.js';
   }
   function libre() {
     clearTimeout(minuteurAnnuler);
+    minuteursTexte.forEach(clearTimeout);
+    $('occupe-photo').removeAttribute('src');
     $('occupe').hidden = true;
   }
 
@@ -244,6 +255,7 @@ import * as NOTE from './note.js';
     aller(nom, 'none');
   });
 
+  var urgentsAvant = null;
   function renderOnglets() {
     var nav = $('onglets');
     var visible = S.configure && (ONGLETS.indexOf(S.ecran) >= 0 || S.ecran === 'fiche');
@@ -260,6 +272,9 @@ import * as NOTE from './note.js';
         (compte ? '<span class="pastille-compte" aria-label="' + compte + ' à faire">' + compte + '</span>' : '') + '</button>';
     };
     nav.innerHTML = onglet('contacts', 'Contacts', ICO.contacts) + onglet('rappels', 'Rappels', ICO.rappels, urgents) + onglet('reglages', 'Réglages', ICO.reglages);
+    var pastille = nav.querySelector('.pastille-compte');
+    if (pastille && urgentsAvant !== null && urgents !== urgentsAvant) pastille.classList.add('pop');
+    urgentsAvant = urgents;
   }
 
   function appliquerEtat(e) {
@@ -842,6 +857,16 @@ import * as NOTE from './note.js';
       '<span>Chercher « ' + esc(q) + ' » sur LinkedIn</span></a>';
   }
 
+  /** Les éléments arrivent l'un après l'autre (fiche remplie par Gemini). */
+  function cascade(selecteur, max) {
+    var vus = [];
+    document.querySelectorAll(selecteur).forEach(function (el) {
+      var bloc = el.closest('label') || el.parentElement;
+      if (vus.indexOf(bloc) < 0 && vus.length < max) vus.push(bloc);
+    });
+    vus.forEach(function (b, i) { b.style.setProperty('--d', (i * 32) + 'ms'); b.classList.add('cascade'); });
+  }
+
   /* ================= Note vocale ================= */
   function oublierNoteLocale() {
     if (S.note) { NOTE.oublier(S.note.cle); URL.revokeObjectURL(S.note.url); }
@@ -878,6 +903,7 @@ import * as NOTE from './note.js';
     var corps;
     if (NOTE.enCours() && S.noteEcran === ou) {
       corps = '<div class="note-rec"><span class="rec-point" aria-hidden="true"></span>' +
+        '<span class="niveau" id="note-niveau-' + ou + '" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i></span>' +
         '<span id="note-temps-' + ou + '" class="note-temps" role="timer">' + NOTE.duree(NOTE.secondes()) + ' / ' + NOTE.duree(NOTE.DUREE_MAX) + '</span>' +
         '<button class="btn pri mini" data-a="note-stop">Arrêter</button></div>';
     } else if (n) {
@@ -1061,7 +1087,8 @@ import * as NOTE from './note.js';
           '<span class="grosse-date">' + (c.dateRelance ? esc(dateLongue(c.dateRelance)) + ' · ' + esc(heureTxt()) : 'Aucune relance prévue') +
             (enRetard(c) ? ' <span class="badge retard">En retard</span>' : '') + '</span>' +
           (c.invites ? '<span class="note">Invités : ' + esc(c.invites) + '</span>' : '') +
-          '<div class="seg c3" role="group" aria-label="Statut">' +
+          '<div class="seg c3 glisse" role="group" aria-label="Statut">' +
+            '<span class="seg-curseur" style="transform:translateX(' + (['À relancer', 'Relancé', 'Sans suite'].indexOf(statutDe(c)) * 100) + '%)"></span>' +
             ['À relancer', 'Relancé', 'Sans suite'].map(function (s) {
               return '<button class="' + (statutDe(c) === s ? 'actif' : '') + '" data-a="statut" data-v="' + s + '" aria-pressed="' + (statutDe(c) === s) + '">' + s + '</button>';
             }).join('') +
@@ -1338,9 +1365,12 @@ import * as NOTE from './note.js';
         S.source = '';
         S.doublonVu = false;
         montrer('verif');
+        cascade('#e-verif [data-f]', 16);
         if (res.photoErreur) toast('Carte lue, mais la photo n\'a pas pu être rangée dans le Drive : ' + res.photoErreur, true);
       }, {
         annulable: true,
+        photo: 'data:' + (S.images.recto.mimeType || 'image/jpeg') + ';base64,' + S.images.recto.data,
+        etapes: [[2200, 'Lecture du nom et des coordonnées…'], [4200, 'Mise en forme de la fiche…']],
         apresAnnulation: function (res) {
           if (res && res.photoIds && res.photoIds.length) appelDiscret(function () { return D.jeterPhotos(res.photoIds); });
         },
@@ -1427,6 +1457,9 @@ import * as NOTE from './note.js';
         S.edition = false;
         if (S.note) { NOTE.oublier(S.note.cle); URL.revokeObjectURL(S.note.url); S.note = null; }
         aller('fiche', 'replace');
+        var cv = document.querySelector('#e-fiche .carte-visite'), ok = document.querySelector('#e-fiche .agenda-ok');
+        if (cv) cv.classList.add('pose');
+        if (ok) ok.classList.add('trace');
         majRecap();
         toast(message);
       };
@@ -1467,6 +1500,11 @@ import * as NOTE from './note.js';
         if (S.noteFiche) { NOTE.oublier(S.noteFiche.note.cle); URL.revokeObjectURL(S.noteFiche.note.url); }
         S.noteFiche = { id: c.id, note: r };
         envoyerNoteFiche();
+      }, function (niveau) {
+        var barres = $('note-niveau-' + ou);
+        if (!barres) return;
+        var poids = [0.55, 0.9, 1, 0.8, 0.6];
+        barres.querySelectorAll('i').forEach(function (b, i) { b.style.transform = 'scaleY(' + Math.max(0.12, Math.min(1, niveau * poids[i] * (0.85 + 0.3 * Math.random()))).toFixed(2) + ')'; });
       }).then(function () { redessinerNote(ou); }, function (e) { toast(messageErreur(e), true); });
     },
     'note-stop': function () { NOTE.arreter(); },
@@ -1519,10 +1557,19 @@ import * as NOTE from './note.js';
         toast('Choisir la date de la relance, puis valider.');
         return;
       }
+      // Le curseur glisse tout de suite vers le nouveau statut, puis l'enregistrement part.
+      var seg = document.querySelector('#e-fiche .seg.glisse');
+      if (seg) {
+        var i = ['À relancer', 'Relancé', 'Sans suite'].indexOf(v);
+        seg.querySelector('.seg-curseur').style.transform = 'translateX(' + (i * 100) + '%)';
+        seg.querySelectorAll('button').forEach(function (b) { var oui = b.getAttribute('data-v') === v; b.classList.toggle('actif', oui); b.setAttribute('aria-pressed', oui); });
+      }
+      setTimeout(function () {
       appel(function () { return D.changerStatut(c.id, v, S.reglages); }, 'Mise à jour…', function (nc) {
         remplacer(nc); RENDUS.fiche(); renderOnglets(); majRecap();
         toast(v === 'Relancé' ? 'Bien joué. Contact marqué comme relancé.' : v === 'Sans suite' ? 'Contact classé sans suite.' : 'Relance réactivée.');
-      });
+      }, { ko: function (message) { RENDUS.fiche(); toast(message, true); } });
+      }, seg ? 280 : 0);
     },
     'ouvrir-report': function () { S.reporter = true; RENDUS.fiche(); },
     'annuler-report': function () { S.reporter = false; RENDUS.fiche(); },

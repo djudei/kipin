@@ -31,7 +31,7 @@ export function secondes() { return rec ? (Date.now() - rec.debut) / 1000 : 0; }
  * Démarre le micro. surTick(secondes) chaque demi-seconde ; surFin({ blob, mime, duree })
  * à l'arrêt (bouton ou 2 minutes atteintes) ; surFin(null) si l'enregistrement est vide.
  */
-export async function demarrer(surTick, surFin) {
+export async function demarrer(surTick, surFin, surNiveau) {
   if (rec) return;
   let flux;
   try {
@@ -45,10 +45,36 @@ export async function demarrer(surTick, surFin) {
   const mime = FORMATS.find(f => MediaRecorder.isTypeSupported && MediaRecorder.isTypeSupported(f)) || '';
   const mr = mime ? new MediaRecorder(flux, { mimeType: mime, audioBitsPerSecond: 48000 }) : new MediaRecorder(flux);
   const morceaux = [];
-  const r = { mr, flux, debut: Date.now(), minuteur: null };
+  const r = { mr, flux, debut: Date.now(), minuteur: null, audio: null, image: 0 };
+  // Niveau du micro (0 à 1), pour montrer que la voix est bien captée.
+  if (surNiveau) {
+    try {
+      const Ctx = window.AudioContext || window.webkitAudioContext;
+      const ctx = new Ctx();
+      if (ctx.state === 'suspended') ctx.resume().catch(() => {});
+      const an = ctx.createAnalyser();
+      an.fftSize = 512;
+      ctx.createMediaStreamSource(flux).connect(an);
+      const tampon = new Uint8Array(an.fftSize);
+      let lisse = 0;
+      const boucle = () => {
+        an.getByteTimeDomainData(tampon);
+        let somme = 0;
+        for (let i = 0; i < tampon.length; i++) { const v = (tampon[i] - 128) / 128; somme += v * v; }
+        const niveau = Math.min(1, Math.sqrt(somme / tampon.length) * 5);
+        lisse = niveau > lisse ? niveau : lisse * 0.85 + niveau * 0.15;
+        surNiveau(lisse);
+        r.image = requestAnimationFrame(boucle);
+      };
+      r.audio = ctx;
+      r.image = requestAnimationFrame(boucle);
+    } catch (e) { /* pas de niveau : l'enregistrement marche quand même */ }
+  }
+  const finNiveau = () => { cancelAnimationFrame(r.image); if (r.audio) r.audio.close().catch(() => {}); r.audio = null; };
   mr.ondataavailable = ev => { if (ev.data && ev.data.size) morceaux.push(ev.data); };
   mr.onstop = () => {
     clearInterval(r.minuteur);
+    finNiveau();
     flux.getTracks().forEach(t => t.stop());
     const d = (Date.now() - r.debut) / 1000;
     rec = null;
@@ -73,7 +99,7 @@ export function arreter() {
 export function abandonner() {
   if (!rec) return;
   const r = rec;
-  r.mr.onstop = () => { clearInterval(r.minuteur); r.flux.getTracks().forEach(t => t.stop()); };
+  r.mr.onstop = () => { clearInterval(r.minuteur); cancelAnimationFrame(r.image); if (r.audio) r.audio.close().catch(() => {}); r.flux.getTracks().forEach(t => t.stop()); };
   rec = null;
   try { r.mr.stop(); } catch (e) { /* déjà arrêté */ }
 }
